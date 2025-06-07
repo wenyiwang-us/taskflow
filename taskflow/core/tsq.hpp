@@ -30,6 +30,165 @@
 
 namespace tf {
 
+
+#if TF_USE_XQUEUE
+  // enum class for task queue push return code
+  enum class TaskQueueCode {
+    TASK_NOT_PUSHED,
+    TASK_PUSHED
+  };
+
+// ----------------------------------------------------------------------------
+// XQueue implementation
+// ----------------------------------------------------------------------------
+  template <typename T, size_t LogSize = TF_DEFAULT_BOUNDED_TASK_QUEUE_LOG_SIZE>
+  class BoundedXQueue {
+    static_assert(std::is_pointer_v<T>, "<XQueue>: T must be a pointer type.");
+
+    // same as the bounded task queue
+    constexpr static int64_t DequeueSize = int64_t{1} << LogSize;
+    constexpr static int64_t DequeueMask = (DequeueSize - 1);
+
+    static_assert((DequeueSize >= 2) &&
+                  ((DequeueSize & (DequeueSize - 1)) == 0));
+
+    // some queue data structure
+    struct XDequeue {
+      T dequeue[DequeueSize];
+      alignas(2 * TF_CACHELINE_SIZE) int64_t head;
+      alignas(2 * TF_CACHELINE_SIZE) int64_t tail;
+    };
+
+    // 2D array of type T with dynamic outer dimension
+    // WW: This now is allocated on the heap while TF's bounded task queue is
+    // allocated on the stack WW: Need to justify if this is a good idea
+    XDequeue *_dequeues;
+    size_t _nworkers; // Store the outer dimension size
+    size_t _worker_id; // Current worker id
+    size_t _last_q;    // Points to the last queue that was used to push a task
+    size_t _last_q_accessed; // Points to the last queue that was accessed
+    
+
+  public:
+
+    // Constructor
+    // BoundedXQueue(std::vector<Worker> &workers);
+    BoundedXQueue(const size_t nworkers);
+
+    // BoundedXQueue(int64_t nworkers, std::vector<Worker> &workers)
+    //     : _nworkers(nworkers), _workers(std::move(workers)) {
+    //   // WW: We need to enforce that the executor will pin workers to
+    //   // threads/cores WW: Or is this not necessary?
+    //   // TODO: Optimizations not considered yet:
+    //   // 1. Cache optimization
+    //   // 2. Allocation optimization (Should we use a freelist?)
+    //   // Allocate the outer array (array of pointers)
+    //   _dequeues = new XDequeue[_nworkers];
+
+    //   // For each thread, allocate a row of size BufferSize
+    //   for (int64_t i = 0; i < _nworkers; i++) {
+    //     _dequeues[i].head = 0;
+    //     _dequeues[i].tail = 0;
+    //   }
+    // }
+
+    ~BoundedXQueue();
+
+    /**
+    @brief queries the capacity of the queue
+    */
+    constexpr size_t capacity() const {
+      return static_cast<size_t>(DequeueSize);
+    }
+
+    // Now it is the same as original xqueue implementation.
+    // We may need to re-consider how to deal with queue full situation. Or
+    // prioritize pushing to local
+    TaskQueueCode push(T item);
+    // TaskQueueCode push(T item) {
+    //   int num_tries = 0;
+    //   size_t target_worker_id = _worker_id + _last_q;
+    //   target_worker_id = (target_worker_id > _nworkers - 1)
+    //                          ? (target_worker_id - _nworkers)
+    //                          : target_worker_id;
+    //   Worker& target_worker = _workers[target_worker_id];
+    //   while (target_worker._xq->_dequeues[_last_q]
+    //              ->dequeue[target_worker._xq->_dequeues[_last_q]->head] !=
+    //          nullptr) {
+    //     num_tries++;
+    //     if (num_tries < 25) {
+    //       continue;
+    //     }
+    //     return TaskQueueCode::TASK_NOT_PUSHED;
+    //   }
+    //   auto target_dequeue = target_worker._xq->_dequeues[_last_q];
+    //   target_dequeue->dequeue[target_dequeue->head] = item;
+    //   target_dequeue->head = (target_dequeue->head + 1) & DequeueMask;
+    //   target_worker._xq->_last_q_accessed = _last_q;
+    //   return TaskQueueCode::TASK_PUSHED;
+    // }
+
+    /**
+    @brief pops out an item from the queue
+
+    @param worker_id the worker id to pop from
+    @return the popped item or nullptr if the queue is empty
+    */
+    T pop(size_t &last_qid);
+    // T pop(size_t &last_qid) {
+
+    //   T item{nullptr};
+    //   // First, pop tasks from my own master queue
+    //   if (_dequeues[0]->dequeue[_dequeues[0]->tail] != nullptr) {
+    //     item = _dequeues[0]->dequeue[_dequeues[0]->tail];
+    //     _dequeues[0]->dequeue[_dequeues[0]->tail] = nullptr;
+    //     _dequeues[0]->tail = (_dequeues[0]->tail + 1) & DequeueMask;
+    //     return item;
+    //   }
+
+    //   // Then, pop tasks from the last accessed queue
+    //   if (_last_q_accessed > 0) {
+    //     auto target_dequeue = _dequeues[_last_q_accessed];
+    //     if (target_dequeue->dequeue[target_dequeue->tail] != nullptr) {
+    //       item = target_dequeue->dequeue[target_dequeue->tail];
+    //       target_dequeue->dequeue[target_dequeue->tail] = nullptr;
+    //       target_dequeue->tail = (target_dequeue->tail + 1) & DequeueMask;
+    //       last_qid = _last_q_accessed;
+    //       return item;
+    //     }
+    //   }
+
+    //   // Then try pop from the last queue
+    //   for (size_t qid = _nworkers - 1; qid > 0; qid--) {
+    //     auto target_dequeue = _dequeues[qid];
+    //     if (target_dequeue->dequeue[target_dequeue->tail] != nullptr) {
+    //       item = target_dequeue->dequeue[target_dequeue->tail];
+    //       target_dequeue->dequeue[target_dequeue->tail] = nullptr;
+    //       target_dequeue->tail = (target_dequeue->tail + 1) & DequeueMask;
+    //       last_qid = qid;
+    //       return item;
+    //     }
+    //   }
+    //   // Then try to pop from the rest of the queues
+    //   for (size_t qid = _nworkers - 1; qid > last_qid; qid--) {
+    //     auto target_dequeue = _dequeues[qid];
+    //     if (target_dequeue->dequeue[target_dequeue->tail] != nullptr) {
+    //       item = target_dequeue->dequeue[target_dequeue->tail];
+    //       target_dequeue->dequeue[target_dequeue->tail] = nullptr;
+    //       target_dequeue->tail = (target_dequeue->tail + 1) & DequeueMask;
+    //       return item;
+    //     }
+    //   }
+
+    //   return item; // which is a nullptr
+    // }
+    std::vector<Worker> *_workers;
+
+    
+  };
+
+#endif // TF_USE_XQUEUE
+
 // ----------------------------------------------------------------------------
 // Task Queue
 // ----------------------------------------------------------------------------

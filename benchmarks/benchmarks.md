@@ -44,7 +44,7 @@ with data collected in an average of ten runs.
 Results are illustrated in a plot and saved to `result.png`.
 
 ```bash
-~$ ./benchmarks.py -m tf omp tbb \ 
+~$ ./benchmarks.py -m tf omp tbb \
                    -b graph_traversal wavefront linear_chain \
                    -t 1 4 8 16 \
                    -r 10 \

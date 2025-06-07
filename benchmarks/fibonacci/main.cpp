@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
   unsigned num_threads {1};
   app.add_option("-t,--num_threads", num_threads, "number of threads (default=1)");
   
-  unsigned num_fibonacci {40};
+  unsigned num_fibonacci {37};
   app.add_option("-f,--fibonacci", num_fibonacci, "max number of fibonacci (default=40)");
 
   unsigned num_rounds {1};

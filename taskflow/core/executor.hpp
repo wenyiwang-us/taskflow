@@ -1139,9 +1139,10 @@ class Executor {
 
 #ifndef DOXYGEN_GENERATING_OUTPUT
 
-// Constructor
+
+#if TF_USE_XQUEUE
+// Custom Executor Constructor for XQueue
 inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
-  _workers  (N),
   _notifier (N),
   _buffers  (N),
   _worker_interface(std::move(wix)) {
@@ -1149,7 +1150,11 @@ inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
   if(N == 0) {
     TF_THROW("executor must define at least one worker");
   }
-  
+  this->_workers.reserve(N);
+  for (size_t i = 0; i < N; i++) {
+    _workers.emplace_back(N);
+  }
+
   // If spawning N threads fails, shut down any created threads before 
   // rethrowing the exception.
 #ifndef TF_DISABLE_EXCEPTION_HANDLING
@@ -1169,6 +1174,38 @@ inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
     TFProfManager::get()._manage(make_observer<TFProfObserver>());
   }
 }
+#else
+// Constructor
+inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
+  _workers  (N),
+  _notifier (N),
+  _buffers  (N),
+  _worker_interface(std::move(wix)) {
+
+  if(N == 0) {
+    TF_THROW("executor must define at least one worker");
+  }
+
+  // If spawning N threads fails, shut down any created threads before 
+  // rethrowing the exception.
+#ifndef TF_DISABLE_EXCEPTION_HANDLING
+  try {
+#endif
+    _spawn(N);
+#ifndef TF_DISABLE_EXCEPTION_HANDLING
+  }
+  catch(...) {
+    _shutdown();
+    std::rethrow_exception(std::current_exception());
+  }
+#endif
+
+  // initialize the default observer if requested
+  if(has_env(TF_ENABLE_PROFILER)) {
+    TFProfManager::get()._manage(make_observer<TFProfObserver>());
+  }
+}
+#endif // TF_USE_XQUEUE
 
 // Destructor
 inline Executor::~Executor() {
@@ -1242,6 +1279,70 @@ inline int Executor::this_worker_id() const {
   return (w && w->_executor == this) ? static_cast<int>(w->_id) : -1;
 }
 
+#if TF_USE_XQUEUE
+// Custom Procedure: _spawn for XQueue
+inline void Executor::_spawn(size_t N) {
+
+  for(size_t id=0; id<N; ++id) {
+    _workers[id]._id = id;
+    _workers[id]._vtm = id;
+    _workers[id]._executor = this;
+    _workers[id]._waiter = &_notifier._waiters[id];
+    _workers[id]._xq._workers = &_workers;
+    _workers[id]._thread = std::thread([&, &w=_workers[id]] () {
+
+      pt::this_worker = &w;
+
+      // initialize the random engine and seed for work-stealing loop
+      w._rdgen.seed(static_cast<std::default_random_engine::result_type>(
+        std::hash<std::thread::id>()(std::this_thread::get_id()))
+      );
+
+      // before entering the work-stealing loop, call the scheduler prologue
+      if(_worker_interface) {
+        _worker_interface->scheduler_prologue(w);
+      }
+
+      Node* t = nullptr;
+      std::exception_ptr ptr = nullptr;
+
+      // must use 1 as condition instead of !done because
+      // the previous worker may stop while the following workers
+      // are still preparing for entering the scheduling loop
+#ifndef TF_DISABLE_EXCEPTION_HANDLING
+      try {
+#endif
+
+        // worker loop
+        while(1) {
+
+          // drain out the local queue
+          _exploit_task(w, t);
+
+          // steal and wait for tasks
+          if(_wait_for_task(w, t) == false) {
+            break;
+          }
+        }
+
+#ifndef TF_DISABLE_EXCEPTION_HANDLING
+      } 
+      catch(...) {
+        ptr = std::current_exception();
+      }
+#endif
+      
+      // call the user-specified epilogue function
+      if(_worker_interface) {
+        _worker_interface->scheduler_epilogue(w, ptr);
+      }
+
+    });
+  } 
+}
+
+#else
+
 // Procedure: _spawn
 inline void Executor::_spawn(size_t N) {
 
@@ -1301,6 +1402,25 @@ inline void Executor::_spawn(size_t N) {
     });
   } 
 }
+#endif // TF_USE_XQUEUE
+
+#if TF_USE_XQUEUE // _corun_until
+// Custom Procedure: _corun_until for XQueue
+template <typename P>
+inline void Executor::_corun_until(Worker& w, P&& stop_predicate) {
+  size_t last_qid = 0;
+  while(!stop_predicate()){
+    if(auto t  = w._xq.pop(last_qid)) {
+      _invoke(w, t);
+    }
+    // else {
+    //   std::this_thread::yield();
+    // }
+  }
+
+}
+
+#else
 
 // Function: _corun_until
 template <typename P>
@@ -1346,6 +1466,15 @@ void Executor::_corun_until(Worker& w, P&& stop_predicate) {
     }
   }
 }
+#endif // TF_USE_XQUEUE: _corun_until
+
+#if TF_USE_XQUEUE
+// Custom Procedure: _explore_task for XQueue
+inline bool Executor::_explore_task(Worker& w, Node*& t) {
+  return true;
+}
+
+#else
 
 // Function: _explore_task
 inline bool Executor::_explore_task(Worker& w, Node*& t) {
@@ -1394,6 +1523,18 @@ inline bool Executor::_explore_task(Worker& w, Node*& t) {
   } 
   return true;
 }
+#endif // TF_USE_XQUEUE
+
+#if TF_USE_XQUEUE
+// Custom Procedure: _exploit_task for XQueue
+inline void Executor::_exploit_task(Worker& w, Node*& t) {
+  size_t last_qid = 0; // be careful about this var's location, false sharing may occur
+  while(t) {
+    _invoke(w, t);
+    t = w._xq.pop(last_qid);
+  }
+}
+#else
 
 // Procedure: _exploit_task
 inline void Executor::_exploit_task(Worker& w, Node*& t) {
@@ -1402,7 +1543,15 @@ inline void Executor::_exploit_task(Worker& w, Node*& t) {
     t = w._wsq.pop();
   }
 }
+#endif // TF_USE_XQUEUE
 
+#if TF_USE_XQUEUE
+// Custom Procedure: _wait_for_task for XQueue
+inline bool Executor::_wait_for_task(Worker& w, Node*& t) {
+  // Do nothing, caller will busy wait
+  return true;
+}
+#else
 // Function: _wait_for_task
 inline bool Executor::_wait_for_task(Worker& w, Node*& t) {
 
@@ -1464,7 +1613,7 @@ inline bool Executor::_wait_for_task(Worker& w, Node*& t) {
   _notifier.commit_wait(w._waiter);
   goto explore_task;
 }
-
+#endif // TF_USE_XQUEUE
 // Function: make_observer
 template<typename Observer, typename... ArgsT>
 std::shared_ptr<Observer> Executor::make_observer(ArgsT&&... args) {
@@ -1501,6 +1650,35 @@ inline size_t Executor::num_observers() const noexcept {
   return _observers.size();
 }
 
+#if TF_USE_XQUEUE
+// Custom Procedure: _schedule for XQueue
+inline void Executor::_schedule(Worker& worker, Node* node) {
+
+  if(worker._xq.push(node) == TaskQueueCode::TASK_PUSHED){
+    _notifier.notify_one();
+  }else{
+    _invoke(worker, node);
+  }
+}
+
+// Procedure: _schedule
+inline void Executor::_schedule(Node* node) {
+  _schedule(*(pt::this_worker), node);
+}
+
+template <typename I>
+inline void Executor::_schedule(Worker& worker, I first, I last) { 
+  TF_THROW("XQueue does not support _schedule(I, I)");
+}
+
+template <typename I>
+inline void Executor::_schedule(I first, I last) {
+  TF_THROW("XQueue does not support _schedule(I, I)");
+}
+
+
+#else
+
 // Procedure: _schedule
 inline void Executor::_schedule(Worker& worker, Node* node) {
   
@@ -1517,7 +1695,6 @@ inline void Executor::_schedule(Worker& worker, Node* node) {
   _buffers.push(node);
   _notifier.notify_one();
 }
-
 // Procedure: _schedule
 inline void Executor::_schedule(Node* node) {
   _buffers.push(node);
@@ -1575,7 +1752,9 @@ inline void Executor::_schedule(I first, I last) {
   }
   _notifier.notify_n(num_nodes);
 }
-  
+
+#endif // TF_USE_XQUEUE
+
 template <typename I>
 void Executor::_schedule_graph_with_parent(Worker& worker, I beg, I end, Node* parent) {
   auto send = _set_up_graph(beg, end, parent->_topology, parent);

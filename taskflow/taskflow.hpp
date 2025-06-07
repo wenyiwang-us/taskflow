@@ -7,6 +7,8 @@
 // + TF_ENABLE_ATOMIC_NOTIFIER : enable atomic notifier (required C++20)
 //
 
+#define TF_USE_XQUEUE 1 // Enable XQueue for static load balancing
+
 #include "core/executor.hpp"
 #include "core/runtime.hpp"
 #include "core/async.hpp"
