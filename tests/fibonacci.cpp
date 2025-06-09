@@ -2,8 +2,8 @@
 // to create recursive parallelism, using the famous Fibonacci recursion as an example.
 #include "../taskflow/taskflow.hpp"
 
-tf::Executor& get_executor() {
-  static tf::Executor executor;
+tf::Executor& get_executor(size_t thread_count) {
+  static tf::Executor executor(thread_count);
   return executor;
 }
 
@@ -26,8 +26,7 @@ size_t spawn_subflow(size_t n, tf::Subflow& sbf) {
   return res1 + res2;
 }
 
-size_t fibonacci_subflow(size_t N) {
-
+size_t fibonacci_subflow(size_t N, size_t thread_count) {
   size_t res;  // result
 
   tf::Taskflow taskflow("fibonacci");
@@ -36,7 +35,7 @@ size_t fibonacci_subflow(size_t N) {
     res = spawn_subflow(N, sbf);
   }).name(std::to_string(N));
 
-  get_executor().run(taskflow).wait();
+  get_executor(thread_count).run(taskflow).wait();
   
   return res;
 }
@@ -64,27 +63,27 @@ size_t spawn_async(size_t N, tf::Runtime& rt) {
   return res1 + res2;
 }
 
-size_t fibonacci_async(size_t N) {
+size_t fibonacci_async(size_t N, size_t thread_count) {
   size_t res;
-  get_executor().async([N, &res](tf::Runtime& rt){ res = spawn_async(N, rt); }).get();
+  get_executor(thread_count).async([N, &res](tf::Runtime& rt){ res = spawn_async(N, rt); }).get();
   return res;
 }
 
 int main(int argc, char* argv[]) {
-
-  if(argc != 3) {
-    std::cerr << "usage: ./fibonacci N [subflow|async]\n";
+  if(argc != 4) {
+    std::cerr << "usage: ./fibonacci N [subflow|async] thread_count\n";
     std::exit(EXIT_FAILURE);
   }
 
   size_t N = std::atoi(argv[1]);
+  size_t thread_count = std::atoi(argv[3]);
 
   auto tbeg = std::chrono::steady_clock::now();
   if(std::strcmp(argv[2], "subflow") == 0) {
-    printf("fib[%zu] (with subflow) = %zu\n", N, fibonacci_subflow(N));
+    printf("fib[%zu] (with subflow) = %zu\n", N, fibonacci_subflow(N, thread_count));
   }
   else if(std::strcmp(argv[2], "async") == 0) {
-    printf("fib[%zu] (with async) = %zu\n", N, fibonacci_async(N));
+    printf("fib[%zu] (with async) = %zu\n", N, fibonacci_async(N, thread_count));
   }
   else {
     std::cerr << "unrecognized method " << argv[2] << '\n';

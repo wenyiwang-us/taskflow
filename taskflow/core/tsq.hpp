@@ -28,6 +28,10 @@
   #define TF_DEFAULT_UNBOUNDED_TASK_QUEUE_LOG_SIZE 10
 #endif
 
+#ifndef TF_DEFAULT_BOUNDED_XQUEUE_LOG_SIZE
+  #define TF_DEFAULT_BOUNDED_XQUEUE_LOG_SIZE 5
+#endif
+
 namespace tf {
 
 
@@ -41,7 +45,7 @@ namespace tf {
 // ----------------------------------------------------------------------------
 // XQueue implementation
 // ----------------------------------------------------------------------------
-  template <typename T, size_t LogSize = TF_DEFAULT_BOUNDED_TASK_QUEUE_LOG_SIZE>
+  template <typename T, size_t LogSize = TF_DEFAULT_BOUNDED_XQUEUE_LOG_SIZE>
   class BoundedXQueue {
     static_assert(std::is_pointer_v<T>, "<XQueue>: T must be a pointer type.");
 
@@ -72,26 +76,7 @@ namespace tf {
   public:
 
     // Constructor
-    // BoundedXQueue(std::vector<Worker> &workers);
-    BoundedXQueue(const size_t nworkers);
-
-    // BoundedXQueue(int64_t nworkers, std::vector<Worker> &workers)
-    //     : _nworkers(nworkers), _workers(std::move(workers)) {
-    //   // WW: We need to enforce that the executor will pin workers to
-    //   // threads/cores WW: Or is this not necessary?
-    //   // TODO: Optimizations not considered yet:
-    //   // 1. Cache optimization
-    //   // 2. Allocation optimization (Should we use a freelist?)
-    //   // Allocate the outer array (array of pointers)
-    //   _dequeues = new XDequeue[_nworkers];
-
-    //   // For each thread, allocate a row of size BufferSize
-    //   for (int64_t i = 0; i < _nworkers; i++) {
-    //     _dequeues[i].head = 0;
-    //     _dequeues[i].tail = 0;
-    //   }
-    // }
-
+    BoundedXQueue(const size_t nworkers, const size_t worker_id);
     ~BoundedXQueue();
 
     /**
@@ -105,28 +90,6 @@ namespace tf {
     // We may need to re-consider how to deal with queue full situation. Or
     // prioritize pushing to local
     TaskQueueCode push(T item);
-    // TaskQueueCode push(T item) {
-    //   int num_tries = 0;
-    //   size_t target_worker_id = _worker_id + _last_q;
-    //   target_worker_id = (target_worker_id > _nworkers - 1)
-    //                          ? (target_worker_id - _nworkers)
-    //                          : target_worker_id;
-    //   Worker& target_worker = _workers[target_worker_id];
-    //   while (target_worker._xq->_dequeues[_last_q]
-    //              ->dequeue[target_worker._xq->_dequeues[_last_q]->head] !=
-    //          nullptr) {
-    //     num_tries++;
-    //     if (num_tries < 25) {
-    //       continue;
-    //     }
-    //     return TaskQueueCode::TASK_NOT_PUSHED;
-    //   }
-    //   auto target_dequeue = target_worker._xq->_dequeues[_last_q];
-    //   target_dequeue->dequeue[target_dequeue->head] = item;
-    //   target_dequeue->head = (target_dequeue->head + 1) & DequeueMask;
-    //   target_worker._xq->_last_q_accessed = _last_q;
-    //   return TaskQueueCode::TASK_PUSHED;
-    // }
 
     /**
     @brief pops out an item from the queue
@@ -135,53 +98,7 @@ namespace tf {
     @return the popped item or nullptr if the queue is empty
     */
     T pop(size_t &last_qid);
-    // T pop(size_t &last_qid) {
 
-    //   T item{nullptr};
-    //   // First, pop tasks from my own master queue
-    //   if (_dequeues[0]->dequeue[_dequeues[0]->tail] != nullptr) {
-    //     item = _dequeues[0]->dequeue[_dequeues[0]->tail];
-    //     _dequeues[0]->dequeue[_dequeues[0]->tail] = nullptr;
-    //     _dequeues[0]->tail = (_dequeues[0]->tail + 1) & DequeueMask;
-    //     return item;
-    //   }
-
-    //   // Then, pop tasks from the last accessed queue
-    //   if (_last_q_accessed > 0) {
-    //     auto target_dequeue = _dequeues[_last_q_accessed];
-    //     if (target_dequeue->dequeue[target_dequeue->tail] != nullptr) {
-    //       item = target_dequeue->dequeue[target_dequeue->tail];
-    //       target_dequeue->dequeue[target_dequeue->tail] = nullptr;
-    //       target_dequeue->tail = (target_dequeue->tail + 1) & DequeueMask;
-    //       last_qid = _last_q_accessed;
-    //       return item;
-    //     }
-    //   }
-
-    //   // Then try pop from the last queue
-    //   for (size_t qid = _nworkers - 1; qid > 0; qid--) {
-    //     auto target_dequeue = _dequeues[qid];
-    //     if (target_dequeue->dequeue[target_dequeue->tail] != nullptr) {
-    //       item = target_dequeue->dequeue[target_dequeue->tail];
-    //       target_dequeue->dequeue[target_dequeue->tail] = nullptr;
-    //       target_dequeue->tail = (target_dequeue->tail + 1) & DequeueMask;
-    //       last_qid = qid;
-    //       return item;
-    //     }
-    //   }
-    //   // Then try to pop from the rest of the queues
-    //   for (size_t qid = _nworkers - 1; qid > last_qid; qid--) {
-    //     auto target_dequeue = _dequeues[qid];
-    //     if (target_dequeue->dequeue[target_dequeue->tail] != nullptr) {
-    //       item = target_dequeue->dequeue[target_dequeue->tail];
-    //       target_dequeue->dequeue[target_dequeue->tail] = nullptr;
-    //       target_dequeue->tail = (target_dequeue->tail + 1) & DequeueMask;
-    //       return item;
-    //     }
-    //   }
-
-    //   return item; // which is a nullptr
-    // }
     std::vector<Worker> *_workers;
 
     
