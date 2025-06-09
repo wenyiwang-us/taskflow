@@ -1060,6 +1060,9 @@ class Executor {
   std::mutex _taskflows_mutex;
   
   std::vector<Worker> _workers;
+  size_t _num_workers;
+  size_t _next_xq_wid;
+  // std::vector<BogusWorker> _workers;
   DefaultNotifier _notifier;
 
 #if __cplusplus >= TF_CPP20
@@ -1142,17 +1145,16 @@ class Executor {
 
 #if TF_USE_XQUEUE
 // Custom Executor Constructor for XQueue
-inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
+inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix):
+  _num_workers(N),
+  _workers  (N),
   _notifier (N),
   _buffers  (N),
-  _worker_interface(std::move(wix)) {
+  _worker_interface(std::move(wix)),
+  _next_xq_wid(0) {
 
   if(N == 0) {
     TF_THROW("executor must define at least one worker");
-  }
-  this->_workers.reserve(N);
-  for (size_t i = 0; i < N; i++) {
-    _workers.emplace_back(N);
   }
 
   // If spawning N threads fails, shut down any created threads before 
@@ -1209,6 +1211,7 @@ inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
 
 // Destructor
 inline Executor::~Executor() {
+  TF_DEBUG(0, "Executor::~Executor()");
   _shutdown();
 }
 
@@ -1288,9 +1291,9 @@ inline void Executor::_spawn(size_t N) {
     _workers[id]._vtm = id;
     _workers[id]._executor = this;
     _workers[id]._waiter = &_notifier._waiters[id];
-    _workers[id]._xq._workers = &_workers;
+    _workers[id].xq_init(_num_workers, id);
+    _workers[id]._xq->_workers = &_workers;
     _workers[id]._thread = std::thread([&, &w=_workers[id]] () {
-
       pt::this_worker = &w;
 
       // initialize the random engine and seed for work-stealing loop
@@ -1312,7 +1315,7 @@ inline void Executor::_spawn(size_t N) {
 #ifndef TF_DISABLE_EXCEPTION_HANDLING
       try {
 #endif
-
+        long long count = 0;
         // worker loop
         while(1) {
 
@@ -1322,6 +1325,10 @@ inline void Executor::_spawn(size_t N) {
           // steal and wait for tasks
           if(_wait_for_task(w, t) == false) {
             break;
+          }
+          count++;
+          if (count % 100000000 == 0) {
+            TF_DEBUG(w._id, "count: %lld", count);
           }
         }
 
@@ -1410,7 +1417,7 @@ template <typename P>
 inline void Executor::_corun_until(Worker& w, P&& stop_predicate) {
   size_t last_qid = 0;
   while(!stop_predicate()){
-    if(auto t  = w._xq.pop(last_qid)) {
+    if(auto t  = w._xq->pop(last_qid)) {
       _invoke(w, t);
     }
     // else {
@@ -1529,10 +1536,14 @@ inline bool Executor::_explore_task(Worker& w, Node*& t) {
 // Custom Procedure: _exploit_task for XQueue
 inline void Executor::_exploit_task(Worker& w, Node*& t) {
   size_t last_qid = 0; // be careful about this var's location, false sharing may occur
-  while(t) {
-    _invoke(w, t);
-    t = w._xq.pop(last_qid);
-  }
+  
+  do{
+    t = w._xq->pop(last_qid);
+    if (t) {
+      TF_DEBUG(w._id, "exploit_task: %p", t);
+      _invoke(w, t);
+    }
+  }while(t);
 }
 #else
 
@@ -1549,6 +1560,16 @@ inline void Executor::_exploit_task(Worker& w, Node*& t) {
 // Custom Procedure: _wait_for_task for XQueue
 inline bool Executor::_wait_for_task(Worker& w, Node*& t) {
   // Do nothing, caller will busy wait
+
+#if __cplusplus >= TF_CPP20
+  if(w._done.test(std::memory_order_relaxed)) {
+#else
+  if(w._done.load(std::memory_order_relaxed)) {
+#endif
+    // _notifier.cancel_wait(w._waiter);
+    return false;
+  }
+
   return true;
 }
 #else
@@ -1653,9 +1674,10 @@ inline size_t Executor::num_observers() const noexcept {
 #if TF_USE_XQUEUE
 // Custom Procedure: _schedule for XQueue
 inline void Executor::_schedule(Worker& worker, Node* node) {
+  // TF_THROW("XQueue does not support _schedule(Worker&, Node*)");
 
-  if(worker._xq.push(node) == TaskQueueCode::TASK_PUSHED){
-    _notifier.notify_one();
+  if(worker._xq->push(node) == TaskQueueCode::TASK_PUSHED){
+    _notifier.notify_all();
   }else{
     _invoke(worker, node);
   }
@@ -1663,7 +1685,14 @@ inline void Executor::_schedule(Worker& worker, Node* node) {
 
 // Procedure: _schedule
 inline void Executor::_schedule(Node* node) {
-  _schedule(*(pt::this_worker), node);
+  // TF_THROW("XQueue does not support _schedule(Node*)");
+  if(pt::this_worker) {
+    _schedule(*(pt::this_worker), node);
+  } else {
+    _schedule(_workers[_next_xq_wid], node);
+    // TODO: need some optimization here
+    _next_xq_wid = _next_xq_wid + 1 > _num_workers ? 0 : _next_xq_wid + 1;
+  }
 }
 
 template <typename I>
@@ -1771,6 +1800,7 @@ TF_FORCE_INLINE void Executor::_update_cache(Worker& worker, Node*& cache, Node*
   
 // Procedure: _invoke
 inline void Executor::_invoke(Worker& worker, Node* node) {
+  TF_DEBUG(worker._id, "invoke task: %p", node);
 
   #define TF_INVOKE_CONTINUATION()  \
   if (cache) {                      \

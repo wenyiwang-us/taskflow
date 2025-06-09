@@ -1,3 +1,5 @@
+#include <cstdio>
+#include <cstdarg>
 #pragma once
 
 // ============================================================================
@@ -47,6 +49,42 @@
 
 #define TF_FWD(T, x) std::forward<T>(x)
 
+// ============================================================================
+// debug printf with function name prefix
+// ============================================================================
+
+
+void tf_debug(int kind, int level, size_t wid, const char* func, const char *msg, ...) {
+    va_list list;
+        va_start(list, msg);
+        char tabs[64], prefix[128], buf[1024];
+
+        // build tabs
+        int i = 0;
+        while (i < level) {
+            tabs[2 * i] = ' ';
+            tabs[2 * i + 1] = ' ';
+            i++;
+        }
+        tabs[2 * i] = '\0';
+
+        sprintf(prefix, "[wid=%ld]%s(%s): ", wid, tabs, func);
+        sprintf(buf, "%s%s\n", prefix, msg);
+
+        // print all at once so that the output is not interleaved
+        vfprintf(stderr, buf, list);
+        va_end(list);
+}
+
+
+#define TF_DEBUG(wid, msg, ...) \
+    tf_debug(0, 0, wid, __func__, msg, ##__VA_ARGS__)
+
+#ifdef TF_DEBUG
+#undef TF_DEBUG
+// empty macro for TF_DEBUG
+#define TF_DEBUG(wid, msg, ...)
+#endif
 
 
 
