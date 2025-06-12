@@ -37,13 +37,17 @@ option(TF_BUILD_BENCHMARKS "Enables builds of benchmarks" OFF)
 option(TF_BUILD_PROFILER "Enables builds of profiler" OFF)
 option(TF_BUILD_CUDA "Enables builds of cuda code" OFF)
 option(TF_BUILD_SYCL "Enables builds of sycl code" OFF)
-option(TF_BUILD_TESTS "Enables builds of tests" ON)
-option(TF_BUILD_EXAMPLES "Enables builds of examples" ON)
+option(TF_BUILD_TESTS "Enables builds of tests" OFF) # WW: Turn off for xtask
+option(TF_BUILD_EXAMPLES "Enables builds of examples" OFF) # WW: Turn off for xtask
+option(TF_BUILD_SELECTED_BENCHMARKS "Enables builds of selected benchmarks" ON) # WW: Turn on for xtask
+option(TF_SELECTED_BENCHMARKS_PREFIX "Prefix for selected benchmarks" "bench_")
+option(TF_USE_XQUEUE "Enables XQueue for static load balancing" OFF)
 
 # project-specific variables
 set(TF_UTEST_DIR ${PROJECT_SOURCE_DIR}/unittests)
 set(TF_EXAMPLE_DIR ${PROJECT_SOURCE_DIR}/examples)
 set(TF_BENCHMARK_DIR ${PROJECT_SOURCE_DIR}/benchmarks)
+set(TF_SELECTED_BENCHMARKS ${PROJECT_SOURCE_DIR}/selected_benchmarks)
 set(TF_3RD_PARTY_DIR ${PROJECT_SOURCE_DIR}/3rd-party)
 set(TF_CMAKE_DIR ${PROJECT_SOURCE_DIR}/cmake)
 set(TF_DEFAULT_BUILD_TYPE "Release")
@@ -232,28 +236,27 @@ endif()
 # /Ox - Full optimization
 # /Oy- do not suppress frame pointers (recommended for debugging)
 #
-#add_library(optimize_settings INTERFACE)
-#add_library(tf::optimize_settings ALIAS optimize_settings)
-#
-#target_compile_options(
-#  optimize_settings INTERFACE
-#  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:Clang>>:-O2 -march=native>
-#  #$<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:AppleClang>>:-O2 -march=native>
-#  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU>>:-O2 -march=native>
-#  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/O2 -DNDEBUG /MP>
-#  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU>>:-O0 -g>
-#  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang>>:-O0 -g>
-#  #$<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:AppleClang>>:-O0 -g>
-#  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:MSVC>>:/Zi /FS /DEBUG /Od /MP /MDd /Oy->
-#)
-#
+add_library(optimize_settings INTERFACE)
+add_library(tf::optimize_settings ALIAS optimize_settings)
+
+target_compile_options(
+  optimize_settings INTERFACE
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:Clang>>:-O2 -march=native>
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU>>:-O2 -march=native>
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/O2 -DNDEBUG /MP>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU>>:-O0 -g>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:Clang>>:-O0 -g>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:AppleClang>>:-O0 -g>
+  $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:MSVC>>:/Zi /FS /DEBUG /Od /MP /MDd /Oy->
+)
+
 add_library(default_settings INTERFACE)
 add_library(tf::default_settings ALIAS default_settings)
 target_link_libraries(
   default_settings 
   INTERFACE 
   tf::error_settings 
-  #tf::optimize_settings 
+  tf::optimize_settings 
   #tf::features_settings
 )
 
@@ -293,6 +296,9 @@ message(STATUS "TF_BUILD_SYCL: " ${TF_BUILD_SYCL})
 message(STATUS "TF_BUILD_SYCL_BITCODE: " ${TF_BUILD_SYCL_BITCODE})
 message(STATUS "TF_BUILD_TESTS: " ${TF_BUILD_TESTS})
 message(STATUS "TF_BUILD_EXAMPLES: " ${TF_BUILD_EXAMPLES})
+message(STATUS "TF_BUILD_SELECTED_BENCHMARKS: " ${TF_BUILD_SELECTED_BENCHMARKS})
+message(STATUS "TF_SELECTED_BENCHMARKS_PREFIX: " ${TF_SELECTED_BENCHMARKS_PREFIX})
+message(STATUS "TF_USE_XQUEUE: " ${TF_USE_XQUEUE})
 message(STATUS "TF_UTEST_DIR: " ${TF_UTEST_DIR})
 message(STATUS "TF_EXAMPLE_DIR: " ${TF_EXAMPLE_DIR})
 message(STATUS "TF_BENCHMARK_DIR: " ${TF_BENCHMARK_DIR})
@@ -355,6 +361,10 @@ endif(TF_BUILD_BENCHMARKS)
 # -----------------------------------------------------------------------------
 # create find_package(Taskflow CONFIG)
 # -----------------------------------------------------------------------------
+
+if(TF_BUILD_SELECTED_BENCHMARKS)
+  add_subdirectory(selected_benchmarks)
+endif(TF_BUILD_SELECTED_BENCHMARKS)
 
 # install header
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/taskflow DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

@@ -6,8 +6,13 @@
 // + TF_ENABLE_TASK_POOL       : enable task pool optimization
 // + TF_ENABLE_ATOMIC_NOTIFIER : enable atomic notifier (required C++20)
 //
+// #define TF_USE_XQUEUE 1 // Now a cmake option, enabled with TF_USE_XQUEUE=ON
 
-#define TF_USE_XQUEUE 1 // Enable XQueue for static load balancing
+#ifdef TF_USE_XQUEUE
+
+#pragma message "TF_USE_XQUEUE is enabled"
+
+#endif
 
 #include "core/executor.hpp"
 #include "core/runtime.hpp"
