@@ -1058,11 +1058,11 @@ class Executor {
   private:
     
   std::mutex _taskflows_mutex;
-  
-  std::vector<Worker> _workers;
+
   size_t _num_workers;
-  size_t _next_xq_wid;
-  // std::vector<BogusWorker> _workers;
+  size_t _next_xq_wid {0};
+
+  std::vector<Worker> _workers;
   DefaultNotifier _notifier;
 
 #if __cplusplus >= TF_CPP20
@@ -1150,13 +1150,14 @@ inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix):
   _workers  (N),
   _notifier (N),
   _buffers  (N),
-  _worker_interface(std::move(wix)),
-  _next_xq_wid(0) {
+  _worker_interface(std::move(wix))
+   {
 
   if(N == 0) {
     TF_THROW("executor must define at least one worker");
   }
-
+  // print to stderr
+  fprintf(stderr, "Executor intializing with %zu workers\n", N);
   // If spawning N threads fails, shut down any created threads before 
   // rethrowing the exception.
 #ifndef TF_DISABLE_EXCEPTION_HANDLING
@@ -1211,7 +1212,6 @@ inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
 
 // Destructor
 inline Executor::~Executor() {
-  TF_DEBUG(0, "Executor::~Executor()");
   _shutdown();
 }
 
@@ -1315,7 +1315,6 @@ inline void Executor::_spawn(size_t N) {
 #ifndef TF_DISABLE_EXCEPTION_HANDLING
       try {
 #endif
-        long long count = 0;
         // worker loop
         while(1) {
 
@@ -1325,10 +1324,6 @@ inline void Executor::_spawn(size_t N) {
           // steal and wait for tasks
           if(_wait_for_task(w, t) == false) {
             break;
-          }
-          count++;
-          if (count % 100000000 == 0) {
-            TF_DEBUG(w._id, "count: %lld", count);
           }
         }
 
@@ -1691,7 +1686,10 @@ inline void Executor::_schedule(Node* node) {
   } else {
     _schedule(_workers[_next_xq_wid], node);
     // TODO: need some optimization here
-    _next_xq_wid = _next_xq_wid + 1 > _num_workers ? 0 : _next_xq_wid + 1;
+    if(TF_LIKELY(++_next_xq_wid < _num_workers)) {
+    }else{
+      _next_xq_wid = 0;
+    }
   }
 }
 
@@ -1800,7 +1798,6 @@ TF_FORCE_INLINE void Executor::_update_cache(Worker& worker, Node*& cache, Node*
   
 // Procedure: _invoke
 inline void Executor::_invoke(Worker& worker, Node* node) {
-  TF_DEBUG(worker._id, "invoke task: %p", node);
 
   #define TF_INVOKE_CONTINUATION()  \
   if (cache) {                      \

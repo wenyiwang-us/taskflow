@@ -59,18 +59,18 @@ namespace tf {
     // some queue data structure
     struct XDequeue {
       T dequeue[DequeueSize];
-      alignas(2 * TF_CACHELINE_SIZE) int64_t head;
-      alignas(2 * TF_CACHELINE_SIZE) int64_t tail;
+      alignas(2 * TF_CACHELINE_SIZE) int64_t head {0};
+      alignas(2 * TF_CACHELINE_SIZE) int64_t tail {0};
     };
 
     // 2D array of type T with dynamic outer dimension
     // WW: This now is allocated on the heap while TF's bounded task queue is
     // allocated on the stack WW: Need to justify if this is a good idea
-    XDequeue *_dequeues;
-    size_t _nworkers; // Store the outer dimension size
-    size_t _worker_id; // Current worker id
-    size_t _last_q;    // Points to the last queue that was used to push a task
-    size_t _last_q_accessed; // Points to the last queue that was accessed
+    XDequeue *_dequeues {nullptr};
+    size_t _nworkers {-1}; // Store the outer dimension size
+    size_t _worker_id {-1}; // Current worker id
+    size_t _last_q {0};    // Points to the last queue that was used to push a task
+    size_t _last_q_accessed {0}; // Points to the last queue that was accessed
     
 
   public:
