@@ -47,7 +47,7 @@ add_executable(
   ${TF_SELECTED_BENCHMARKS_PREFIX}fibonacci
   ${TF_SELECTED_BENCHMARKS}/fibonacci/main.cpp
   ${TF_SELECTED_BENCHMARKS}/fibonacci/omp.cpp
-  ${TF_SELECTED_BENCHMARKS}/fibonacci/tbb.cpp
+  # ${TF_SELECTED_BENCHMARKS}/fibonacci/tbb.cpp
   ${TF_SELECTED_BENCHMARKS}/fibonacci/taskflow.cpp
 )
 target_include_directories(${TF_SELECTED_BENCHMARKS_PREFIX}fibonacci PRIVATE ${PROJECT_SOURCE_DIR}/3rd-party/CLI11)

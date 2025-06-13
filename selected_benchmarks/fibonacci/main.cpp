@@ -24,9 +24,9 @@ void bench_fibonacci(
       else if(model == "omp") {
         runtime += measure_time_omp(num_threads, num_fibonacci).count();
       }
-      else if(model == "tbb") {
-        runtime += measure_time_tbb(num_threads, num_fibonacci).count();
-      }
+      // else if(model == "tbb") {
+      //   runtime += measure_time_tbb(num_threads, num_fibonacci).count();
+      // }
       
       else assert(false);
     }
@@ -54,8 +54,10 @@ int main(int argc, char* argv[]) {
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name std|omp|tf|tbb (default=tf)")
      ->check([] (const std::string& m) {
-        if(m != "omp" && m != "tf" && m != "tbb") {
-          return "model name should be \"omp\", \"tbb\", or \"tf\"";
+        if(m != "omp" && m != "tf") {
+          return "model name should be \"omp\" or \"tf\"";
+        }else if(m == "tbb") {
+          return "tbb is not supported";
         }
         return "";
      });
