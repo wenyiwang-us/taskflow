@@ -63,6 +63,26 @@ if(TF_USE_XQUEUE)
   target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}fibonacci PRIVATE TF_USE_XQUEUE=1)
 endif()
 
+
+## benchmark 5: nqueens
+add_executable(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}nqueens
+  ${TF_SELECTED_BENCHMARKS}/nqueens/main.cpp
+  ${TF_SELECTED_BENCHMARKS}/nqueens/omp.cpp
+  # ${TF_SELECTED_BENCHMARKS}/nqueens/tbb.cpp
+  ${TF_SELECTED_BENCHMARKS}/nqueens/taskflow.cpp
+)
+target_include_directories(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PRIVATE ${PROJECT_SOURCE_DIR}/3rd-party/CLI11)
+target_link_libraries(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}nqueens
+  ${PROJECT_NAME} 
+  ${TBB_IMPORTED_TARGETS} 
+  ${OpenMP_CXX_LIBRARIES} 
+  tf::default_settings
+)
+set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+
+
 # ## benchmark 1: async_task
 # add_executable(
 #   ${TF_SELECTED_BENCHMARKS_PREFIX}async_task
