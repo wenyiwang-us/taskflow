@@ -1,3 +1,0 @@
-model=tf num_threads=32 num_rounds=5 fibonacci=35 
-        size     threads     runtime
-          35          32     124.012
