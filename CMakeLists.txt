@@ -42,6 +42,7 @@ option(TF_BUILD_EXAMPLES "Enables builds of examples" OFF) # WW: Turn off for xt
 option(TF_BUILD_SELECTED_BENCHMARKS "Enables builds of selected benchmarks" ON) # WW: Turn on for xtask
 option(TF_SELECTED_BENCHMARKS_PREFIX "Prefix for selected benchmarks" "bench_")
 option(TF_USE_XQUEUE "Enables XQueue for static load balancing" OFF)
+option(TF_ENABLE_TASK_POOL "Enables task pool for taskflow" OFF)
 
 # project-specific variables
 set(TF_UTEST_DIR ${PROJECT_SOURCE_DIR}/unittests)
@@ -299,6 +300,7 @@ message(STATUS "TF_BUILD_EXAMPLES: " ${TF_BUILD_EXAMPLES})
 message(STATUS "TF_BUILD_SELECTED_BENCHMARKS: " ${TF_BUILD_SELECTED_BENCHMARKS})
 message(STATUS "TF_SELECTED_BENCHMARKS_PREFIX: " ${TF_SELECTED_BENCHMARKS_PREFIX})
 message(STATUS "TF_USE_XQUEUE: " ${TF_USE_XQUEUE})
+message(STATUS "TF_ENABLE_TASK_POOL: " ${TF_ENABLE_TASK_POOL})
 message(STATUS "TF_UTEST_DIR: " ${TF_UTEST_DIR})
 message(STATUS "TF_EXAMPLE_DIR: " ${TF_EXAMPLE_DIR})
 message(STATUS "TF_BENCHMARK_DIR: " ${TF_BENCHMARK_DIR})
