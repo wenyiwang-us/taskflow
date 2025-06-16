@@ -9,6 +9,7 @@ void bench_nqueens(
   ) {
 
   std::cout << std::setw(12) << "size"
+            << std::setw(12) << "num_threads"
             << std::setw(12) << "runtime"
             << std::endl;
 
@@ -31,6 +32,7 @@ void bench_nqueens(
     }
 
     std::cout << std::setw(12) << q
+              << std::setw(12) << num_threads
               << std::setw(12) << runtime / num_rounds / 1e3
               << std::endl;
   // }
@@ -43,7 +45,7 @@ int main(int argc, char* argv[]) {
   size_t num_threads {1};
   app.add_option("-t,--num_threads", num_threads, "number of threads (default=1)");
   
-  size_t num_queens {14};
+  size_t num_queens {13};
   app.add_option("-q,--queens", num_queens, "max number of queens (default=14)");
 
   size_t num_rounds {1};
