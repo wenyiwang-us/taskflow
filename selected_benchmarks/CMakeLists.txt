@@ -81,6 +81,9 @@ target_link_libraries(
   tf::default_settings
 )
 set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+if(TF_USE_XQUEUE)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PRIVATE TF_USE_XQUEUE=1)
+endif()
 
 
 # ## benchmark 1: async_task
