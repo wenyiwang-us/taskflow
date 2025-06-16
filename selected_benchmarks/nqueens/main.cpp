@@ -5,14 +5,14 @@ void bench_nqueens(
   const std::string& model,
   const size_t num_threads,
   const size_t num_rounds,
-  const size_t num_queens
+  const size_t q // num_queens
   ) {
 
   std::cout << std::setw(12) << "size"
             << std::setw(12) << "runtime"
             << std::endl;
 
-  for(size_t q=1; q<=num_queens; ++q) {
+  // for(size_t q=1; q<=num_queens; ++q) {
 
     double runtime {0.0};
 
@@ -23,9 +23,9 @@ void bench_nqueens(
       else if(model == "omp") {
         runtime += measure_time_omp(num_threads, q).count();
       }
-      else if(model == "tbb") {
-        runtime += measure_time_tbb(num_threads, q).count();
-      }
+      // else if(model == "tbb") {
+      //   runtime += measure_time_tbb(num_threads, q).count();
+      // }
       
       else assert(false);
     }
@@ -33,7 +33,7 @@ void bench_nqueens(
     std::cout << std::setw(12) << q
               << std::setw(12) << runtime / num_rounds / 1e3
               << std::endl;
-  }
+  // }
 }
 
 int main(int argc, char* argv[]) {
