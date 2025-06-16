@@ -62,6 +62,9 @@ set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}fibonacci PROPERTIES COMPI
 if(TF_USE_XQUEUE)
   target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}fibonacci PRIVATE TF_USE_XQUEUE=1)
 endif()
+if(TF_ENABLE_TASK_POOL)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}fibonacci PRIVATE TF_ENABLE_TASK_POOL=1)
+endif()
 
 
 ## benchmark 5: nqueens
@@ -84,7 +87,9 @@ set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PROPERTIES COMPILE
 if(TF_USE_XQUEUE)
   target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PRIVATE TF_USE_XQUEUE=1)
 endif()
-
+if(TF_ENABLE_TASK_POOL)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PRIVATE TF_ENABLE_TASK_POOL=1)
+endif()
 
 # ## benchmark 1: async_task
 # add_executable(
