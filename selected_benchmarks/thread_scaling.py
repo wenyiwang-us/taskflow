@@ -93,7 +93,7 @@ def main():
   # Create the plot
   # Create subplot for each benchmark
   num_benchmarks = len(args.benchmarks)
-  rows = math.ceil(num_benchmarks / 2)  # 2 columns
+  rows = math.ceil(num_benchmarks)  # 2 columns
   cols = 1
   fig, axes = plot.subplots(rows, cols, figsize=(12, 5*rows))
   # Ensure axes is always a list of axis objects

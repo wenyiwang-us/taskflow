@@ -17,5 +17,5 @@ inline void func(std::atomic<size_t>& counter) {
 
 std::chrono::microseconds measure_time_taskflow(unsigned, size_t);
 std::chrono::microseconds measure_time_omp(unsigned, size_t);
-std::chrono::microseconds measure_time_tbb(unsigned, size_t);
+// std::chrono::microseconds measure_time_tbb(unsigned, size_t);
 std::chrono::microseconds measure_time_std(unsigned, size_t);

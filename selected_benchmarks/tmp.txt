@@ -1,3 +1,0 @@
-model=tf num_threads=1 num_rounds=5 nqueens=13 
-        size     runtime
-          13     7353.69
