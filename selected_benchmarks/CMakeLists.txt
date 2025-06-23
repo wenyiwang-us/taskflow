@@ -42,7 +42,7 @@ find_package(TBB REQUIRED)
 # -----------------------------------------------------------------------------
 
 
-## benchmark 3: fibonacci
+## benchmark 1: fibonacci
 add_executable(
   ${TF_SELECTED_BENCHMARKS_PREFIX}fibonacci
   ${TF_SELECTED_BENCHMARKS}/fibonacci/main.cpp
@@ -67,7 +67,7 @@ if(TF_ENABLE_TASK_POOL)
 endif()
 
 
-## benchmark 5: nqueens
+## benchmark 2: nqueens
 add_executable(
   ${TF_SELECTED_BENCHMARKS_PREFIX}nqueens
   ${TF_SELECTED_BENCHMARKS}/nqueens/main.cpp
@@ -91,24 +91,80 @@ if(TF_ENABLE_TASK_POOL)
   target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}nqueens PRIVATE TF_ENABLE_TASK_POOL=1)
 endif()
 
-# ## benchmark 1: async_task
-# add_executable(
-#   ${TF_SELECTED_BENCHMARKS_PREFIX}async_task
-#   ${TF_SELECTED_BENCHMARKS}/async_task/main.cpp
-#   ${TF_SELECTED_BENCHMARKS}/async_task/omp.cpp
-#   ${TF_SELECTED_BENCHMARKS}/async_task/tbb.cpp
-#   ${TF_SELECTED_BENCHMARKS}/async_task/std.cpp
-#   ${TF_SELECTED_BENCHMARKS}/async_task/taskflow.cpp
-# )
-# target_include_directories(${TF_SELECTED_BENCHMARKS_PREFIX}async_task PRIVATE ${PROJECT_SOURCE_DIR}/3rd-party/CLI11)
-# target_link_libraries(
-#   ${TF_SELECTED_BENCHMARKS_PREFIX}async_task
-#   ${PROJECT_NAME} 
-#   ${TBB_IMPORTED_TARGETS} 
-#   ${OpenMP_CXX_LIBRARIES} 
-#   tf::default_settings
-# )
-# set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}async_task PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+## benchmark 3: async_task
+add_executable(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}async_task
+  ${TF_SELECTED_BENCHMARKS}/async_task/main.cpp
+  ${TF_SELECTED_BENCHMARKS}/async_task/omp.cpp
+  # ${TF_SELECTED_BENCHMARKS}/async_task/tbb.cpp
+  ${TF_SELECTED_BENCHMARKS}/async_task/std.cpp
+  ${TF_SELECTED_BENCHMARKS}/async_task/taskflow.cpp
+)
+target_include_directories(${TF_SELECTED_BENCHMARKS_PREFIX}async_task PRIVATE ${PROJECT_SOURCE_DIR}/3rd-party/CLI11)
+target_link_libraries(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}async_task
+  ${PROJECT_NAME} 
+  ${TBB_IMPORTED_TARGETS} 
+  ${OpenMP_CXX_LIBRARIES} 
+  tf::default_settings
+)
+set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}async_task PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+if(TF_USE_XQUEUE)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}async_task PRIVATE TF_USE_XQUEUE=1)
+endif()
+if(TF_ENABLE_TASK_POOL)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}async_task PRIVATE TF_ENABLE_TASK_POOL=1)
+endif()
+
+## benchmark 4: skynet
+add_executable(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}skynet
+  ${TF_SELECTED_BENCHMARKS}/skynet/main.cpp
+  # ${TF_SELECTED_BENCHMARKS}/skynet/tbb.cpp
+  ${TF_SELECTED_BENCHMARKS}/skynet/omp.cpp
+  ${TF_SELECTED_BENCHMARKS}/skynet/taskflow.cpp
+)
+target_include_directories(${TF_SELECTED_BENCHMARKS_PREFIX}skynet PRIVATE ${PROJECT_SOURCE_DIR}/3rd-party/CLI11)
+target_link_libraries(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}skynet
+  ${PROJECT_NAME} 
+  ${TBB_IMPORTED_TARGETS} 
+  ${OpenMP_CXX_LIBRARIES} 
+  tf::default_settings
+)
+set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}skynet PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+if(TF_USE_XQUEUE)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}skynet PRIVATE TF_USE_XQUEUE=1)
+endif()
+if(TF_ENABLE_TASK_POOL)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}skynet PRIVATE TF_ENABLE_TASK_POOL=1)
+endif()
+
+## benchmark 5: integrate
+add_executable(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}integrate
+  ${TF_SELECTED_BENCHMARKS}/integrate/main.cpp
+  # ${TF_SELECTED_BENCHMARKS}/integrate/tbb.cpp
+  ${TF_SELECTED_BENCHMARKS}/integrate/omp.cpp
+  ${TF_SELECTED_BENCHMARKS}/integrate/taskflow.cpp
+)
+target_include_directories(${TF_SELECTED_BENCHMARKS_PREFIX}integrate PRIVATE ${PROJECT_SOURCE_DIR}/3rd-party/CLI11)
+target_link_libraries(
+  ${TF_SELECTED_BENCHMARKS_PREFIX}integrate
+  ${PROJECT_NAME} 
+  ${TBB_IMPORTED_TARGETS} 
+  ${OpenMP_CXX_LIBRARIES} 
+  tf::default_settings
+)
+set_target_properties(${TF_SELECTED_BENCHMARKS_PREFIX}integrate PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+if(TF_USE_XQUEUE)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}integrate PRIVATE TF_USE_XQUEUE=1)
+endif()
+if(TF_ENABLE_TASK_POOL)
+  target_compile_definitions(${TF_SELECTED_BENCHMARKS_PREFIX}integrate PRIVATE TF_ENABLE_TASK_POOL=1)
+endif()
+
+
 
 # ## benchmark 2: binary_tree
 # add_executable(
