@@ -1081,6 +1081,9 @@ class Executor {
   std::unordered_set<std::shared_ptr<ObserverInterface>> _observers;
 
   void _shutdown();
+  #ifdef TF_ENABLE_STATS
+  void _collect_stats();
+  #endif // TF_ENABLE_STATS
   void _observer_prologue(Worker&, Node*);
   void _observer_epilogue(Worker&, Node*);
   void _spawn(size_t);
@@ -1231,6 +1234,10 @@ inline void Executor::_shutdown() {
   }
   
   _notifier.notify_all();
+
+  #ifdef TF_ENABLE_STATS
+  _collect_stats();
+  #endif // TF_ENABLE_STATS
   
   // Only join the thread if it is joinable, as std::thread construction 
   // may fail and throw an exception.
@@ -1240,6 +1247,164 @@ inline void Executor::_shutdown() {
     }
   }
 }
+
+#ifdef TF_ENABLE_STATS
+inline void Executor::_collect_stats() {
+  #ifdef TF_USE_XQUEUE
+  uint64_t ntasks_pushed_self = 0;
+  uint64_t ntasks_pushed_remote = 0;
+  uint64_t ntasks_popped_self = 0;
+  uint64_t ntasks_popped_remote = 0;
+  uint64_t ntasks_not_pushed = 0;
+  uint64_t ntasks_not_popped = 0;
+  #else
+  uint64_t ntasks_pushed_wsq = 0;
+  uint64_t ntasks_not_pushed_wsq = 0;
+  uint64_t ntasks_popped_wsq = 0;
+  uint64_t ntasks_not_popped_wsq = 0;
+  uint64_t ntasks_stolen_wsq = 0;
+  uint64_t ntasks_not_stolen_wsq = 0;
+  #endif
+  uint64_t nexec_from_self = 0;
+  uint64_t nexec_from_remote = 0;
+  uint64_t nexec_from_executor = 0;
+
+  for(auto& w : _workers) {
+    #ifdef TF_USE_XQUEUE
+    ntasks_pushed_self += w._xq->ntasks_pushed_self;
+    ntasks_pushed_remote += w._xq->ntasks_pushed_remote;
+    ntasks_popped_self += w._xq->ntasks_popped_self;
+    ntasks_popped_remote += w._xq->ntasks_popped_remote;
+    ntasks_not_pushed += w._xq->ntasks_not_pushed;
+    ntasks_not_popped += w._xq->ntasks_not_popped;
+
+    // Percentage
+    auto total_pushed = w._xq->ntasks_pushed_self + w._xq->ntasks_pushed_remote;
+    auto total_popped = w._xq->ntasks_popped_self + w._xq->ntasks_popped_remote;
+    auto total_pop_ops = total_popped + w._xq->ntasks_not_popped;
+    auto total_push_ops = total_pushed + w._xq->ntasks_not_pushed;
+
+    double p_pushed_self = static_cast<double>(w._xq->ntasks_pushed_self) / total_pushed * 100.0;
+    double p_pushed_remote = static_cast<double>(w._xq->ntasks_pushed_remote) / total_pushed * 100.0;
+    double p_popped_self = static_cast<double>(w._xq->ntasks_popped_self) / total_popped * 100.0;
+    double p_popped_remote = static_cast<double>(w._xq->ntasks_popped_remote) / total_popped * 100.0;
+    double p_not_pushed = static_cast<double>(w._xq->ntasks_not_pushed) / total_push_ops * 100.0;
+    double p_not_popped = static_cast<double>(w._xq->ntasks_not_popped) / total_pop_ops * 100.0;
+    #else
+    ntasks_pushed_wsq += w._wsq.ntasks_pushed_wsq;
+    ntasks_not_pushed_wsq += w._wsq.ntasks_not_pushed_wsq;
+    ntasks_popped_wsq += w._wsq.ntasks_popped_wsq;
+    ntasks_not_popped_wsq += w._wsq.ntasks_not_popped_wsq;
+    ntasks_stolen_wsq += w._wsq.ntasks_stolen_wsq;
+    ntasks_not_stolen_wsq += w._wsq.ntasks_not_stolen_wsq;
+    // Percentage
+    auto total_pushed = w._wsq.ntasks_pushed_wsq + w._wsq.ntasks_not_pushed_wsq;
+    auto total_popped = w._wsq.ntasks_popped_wsq + w._wsq.ntasks_not_popped_wsq;
+    auto total_stolen = w._wsq.ntasks_stolen_wsq + w._wsq.ntasks_not_stolen_wsq;
+
+    double p_pushed_wsq = static_cast<double>(w._wsq.ntasks_pushed_wsq) / total_pushed * 100.0;
+    double p_not_pushed_wsq = static_cast<double>(w._wsq.ntasks_not_pushed_wsq) / total_pushed * 100.0;
+    double p_popped_wsq = static_cast<double>(w._wsq.ntasks_popped_wsq) / total_popped * 100.0;
+    double p_not_popped_wsq = static_cast<double>(w._wsq.ntasks_not_popped_wsq) / total_popped * 100.0;
+    double p_stolen_wsq = static_cast<double>(w._wsq.ntasks_stolen_wsq) / total_stolen * 100.0;
+    double p_not_stolen_wsq = static_cast<double>(w._wsq.ntasks_not_stolen_wsq) / total_stolen * 100.0;
+    #endif
+    nexec_from_self += w.nexec_from_self;
+    nexec_from_remote += w.nexec_from_remote;
+    nexec_from_executor += w.nexec_from_executor;
+    auto total_exec = w.nexec_from_self + w.nexec_from_remote + w.nexec_from_executor;
+    double p_exec_from_self = static_cast<double>(w.nexec_from_self) / total_exec * 100.0;
+    double p_exec_from_remote = static_cast<double>(w.nexec_from_remote) / total_exec * 100.0;
+    double p_exec_from_executor = static_cast<double>(w.nexec_from_executor) / total_exec * 100.0; 
+
+    // Print statistics for each worker
+    printf("Worker %zu: "
+    #ifdef TF_USE_XQUEUE
+    "Self-push = %lu (%.2f%%), Remote-push = %lu (%.2f%%), "
+    "Self-pop = %lu (%.2f%%), Remote-pop = %lu (%.2f%%), "
+    "Not-pushed = %lu (%.2f%%), Not-popped = %lu (%.2f%%), "
+    #else
+    "WSQ-push = %lu (%.2f%%), WSQ-not-pushed = %lu (%.2f%%), "
+    "WSQ-pop = %lu (%.2f%%), WSQ-not-popped = %lu (%.2f%%), "
+    "WSQ-stolen = %lu (%.2f%%), WSQ-not-stolen = %lu (%.2f%%), "
+    #endif
+    "Self-exec = %lu (%.2f%%), Remote-exec = %lu (%.2f%%), Executor-exec = %lu (%.2f%%)\n",
+    w._id,
+    #ifdef TF_USE_XQUEUE
+    w._xq->ntasks_pushed_self, p_pushed_self, w._xq->ntasks_pushed_remote, p_pushed_remote,
+    w._xq->ntasks_popped_self, p_popped_self, w._xq->ntasks_popped_remote, p_popped_remote,
+    w._xq->ntasks_not_pushed, p_not_pushed, w._xq->ntasks_not_popped, p_not_popped,
+    #else
+    w._wsq.ntasks_pushed_wsq, p_pushed_wsq, w._wsq.ntasks_not_pushed_wsq, p_not_pushed_wsq,
+    w._wsq.ntasks_popped_wsq, p_popped_wsq, w._wsq.ntasks_not_popped_wsq, p_not_popped_wsq,
+    w._wsq.ntasks_stolen_wsq, p_stolen_wsq, w._wsq.ntasks_not_stolen_wsq, p_not_stolen_wsq,
+    #endif
+    w.nexec_from_self, p_exec_from_self,
+    w.nexec_from_remote, p_exec_from_remote,
+    w.nexec_from_executor, p_exec_from_executor
+    );
+  }
+  // Calculate total statistics
+  #ifdef TF_USE_XQUEUE
+  auto total_pushed_at = ntasks_pushed_self + ntasks_pushed_remote;
+  auto total_popped_at = ntasks_popped_self + ntasks_popped_remote;
+  auto total_pop_ops_at = total_popped_at + ntasks_not_popped;
+  auto total_push_ops_at = total_pushed_at + ntasks_not_pushed;
+
+  double p_pushed_self_at = static_cast<double>(ntasks_pushed_self) / total_pushed_at * 100.0;
+  double p_pushed_remote_at = static_cast<double>(ntasks_pushed_remote) / total_pushed_at * 100.0;
+  double p_popped_self_at = static_cast<double>(ntasks_popped_self) / total_popped_at * 100.0;
+  double p_popped_remote_at = static_cast<double>(ntasks_popped_remote) / total_popped_at * 100.0;
+  double p_not_pushed_at = static_cast<double>(ntasks_not_pushed) / total_push_ops_at * 100.0;
+  double p_not_popped_at = static_cast<double>(ntasks_not_popped) / total_pop_ops_at * 100.0;
+
+  #else
+  auto total_pushed_wsq_at = ntasks_pushed_wsq + ntasks_not_pushed_wsq;
+  auto total_popped_wsq_at = ntasks_popped_wsq + ntasks_not_popped_wsq;
+  auto total_stolen_wsq_at = ntasks_stolen_wsq + ntasks_not_stolen_wsq;
+  double p_pushed_wsq_at = static_cast<double>(ntasks_pushed_wsq) / total_pushed_wsq_at * 100.0;
+  double p_not_pushed_wsq_at = static_cast<double>(ntasks_not_pushed_wsq) / total_pushed_wsq_at * 100.0;
+  double p_popped_wsq_at = static_cast<double>(ntasks_popped_wsq) / total_popped_wsq_at * 100.0;
+  double p_not_popped_wsq_at = static_cast<double>(ntasks_not_popped_wsq) / total_popped_wsq_at * 100.0;
+  double p_stolen_wsq_at = static_cast<double>(ntasks_stolen_wsq) / total_stolen_wsq_at * 100.0;
+  double p_not_stolen_wsq_at = static_cast<double>(ntasks_not_stolen_wsq) / total_stolen_wsq_at * 100.0;
+
+  #endif
+  auto total_exec_at = nexec_from_self + nexec_from_remote + nexec_from_executor;
+  double p_exec_from_self_at = static_cast<double>(nexec_from_self) / total_exec_at * 100.0;
+  double p_exec_from_remote_at = static_cast<double>(nexec_from_remote) / total_exec_at * 100.0;
+  double p_exec_from_executor_at = static_cast<double>(nexec_from_executor) / total_exec_at * 100.0;
+
+  printf("Total: "
+  #ifdef TF_USE_XQUEUE
+  "Self-push = %lu (%.2f%%), Remote-push = %lu (%.2f%%), "  
+  "Self-pop = %lu (%.2f%%), Remote-pop = %lu (%.2f%%), "
+  "Not-pushed = %lu (%.2f%%), Not-popped = %lu (%.2f%%), "
+  #else
+  "WSQ-push = %lu (%.2f%%), WSQ-not-pushed = %lu (%.2f%%), "
+  "WSQ-pop = %lu (%.2f%%), WSQ-not-popped = %lu (%.2f%%), "
+  "WSQ-stolen = %lu (%.2f%%), WSQ-not-stolen = %lu (%.2f%%), "
+  #endif
+  "Self-exec = %lu (%.2f%%), Remote-exec = %lu (%.2f%%), Executor-exec = %lu (%.2f%%)\n",
+  #ifdef TF_USE_XQUEUE
+  total_pushed_at, p_pushed_self_at, total_pushed_at, p_pushed_remote_at,
+  total_popped_at, p_popped_self_at, total_popped_at, p_popped_remote_at,
+  total_push_ops_at, p_not_pushed_at, total_pop_ops_at, p_not_popped_at,
+  #else
+  ntasks_pushed_wsq, p_pushed_wsq_at, ntasks_not_pushed_wsq, p_not_pushed_wsq_at,
+  ntasks_popped_wsq, p_popped_wsq_at, ntasks_not_popped_wsq, p_not_popped_wsq_at,
+  ntasks_stolen_wsq, p_stolen_wsq_at, ntasks_not_stolen_wsq, p_not_stolen_wsq_at,
+  #endif
+  nexec_from_self, p_exec_from_self_at, nexec_from_remote, p_exec_from_remote_at,
+  nexec_from_executor, p_exec_from_executor_at
+  );
+
+  printf("Centralized freelist pushed %lu tasks.\n",
+    _buffers.ntasks_pushed_centralized
+  );
+
+}
+#endif // TF_ENABLE_STATS
 
 // Function: num_workers
 inline size_t Executor::num_workers() const noexcept {
@@ -1672,7 +1837,7 @@ inline void Executor::_schedule(Worker& worker, Node* node) {
   // TF_THROW("XQueue does not support _schedule(Worker&, Node*)");
 
   if(worker._xq->push(node) == TaskQueueCode::TASK_PUSHED){
-    _notifier.notify_all();
+    // _notifier.notify_all();
   }else{
     _invoke(worker, node);
   }
@@ -1834,6 +1999,17 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
   
   SmallVector<int> conds;
 
+  #ifdef TF_ENABLE_STATS
+  if(static_cast<int>(worker._id) != node->_widx){
+    if(node->_widx == -1) {
+      worker.nexec_from_executor++;
+    }else{
+      worker.nexec_from_remote++;
+    }
+  }else{
+    worker.nexec_from_self++;
+  }
+  #endif
   // switch is faster than nested if-else due to jump table
   switch(node->_handle.index()) {
     // static task

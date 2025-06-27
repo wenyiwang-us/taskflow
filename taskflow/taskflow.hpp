@@ -14,6 +14,15 @@
 
 #endif
 
+#define TF_ENABLE_STATS 1
+
+#ifdef TF_ENABLE_STATS
+
+#pragma message "TF_ENABLE_STATS is enabled"
+
+#endif
+
+
 #include "core/executor.hpp"
 #include "core/runtime.hpp"
 #include "core/async.hpp"

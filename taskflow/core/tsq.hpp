@@ -71,7 +71,8 @@ namespace tf {
     size_t _worker_id {-1}; // Current worker id
     size_t _last_q {0};    // Points to the last queue that was used to push a task
     size_t _last_q_accessed {0}; // Points to the last queue that was accessed
-    
+
+
 
   public:
 
@@ -101,6 +102,14 @@ namespace tf {
 
     std::vector<Worker> *_workers;
 
+    #ifdef TF_ENABLE_STATS
+    uint64_t ntasks_pushed_self {0};
+    uint64_t ntasks_pushed_remote {0};
+    uint64_t ntasks_not_pushed {0};
+    uint64_t ntasks_popped_self {0};
+    uint64_t ntasks_popped_remote {0};
+    uint64_t ntasks_not_popped {0};
+    #endif // TF_ENABLE_STATS
     
   };
 
@@ -524,6 +533,16 @@ class BoundedTaskQueue {
   otherwise, `num_empty_steals` is reset to zero.
   */
   T steal_with_hint(size_t& num_empty_steals);
+
+  #ifdef TF_ENABLE_STATS
+  
+  uint64_t ntasks_pushed_wsq {0};
+  uint64_t ntasks_not_pushed_wsq {0};
+  uint64_t ntasks_popped_wsq {0};
+  uint64_t ntasks_not_popped_wsq {0};
+  uint64_t ntasks_stolen_wsq {0};
+  uint64_t ntasks_not_stolen_wsq {0};
+  #endif // TF_ENABLE_STATS
 };
 
 // Function: empty
@@ -552,6 +571,9 @@ bool BoundedTaskQueue<T, LogSize>::try_push(O&& o) {
 
   // queue is full with one additional item (b-t+1)
   if TF_UNLIKELY((b - t) > BufferSize - 1) {
+    #ifdef TF_ENABLE_STATS
+    ++ntasks_not_pushed_wsq;
+    #endif // TF_ENABLE_STATS
     return false;
   }
   
@@ -561,7 +583,9 @@ bool BoundedTaskQueue<T, LogSize>::try_push(O&& o) {
   
   // original paper uses relaxed here but tsa complains
   _bottom.store(b + 1, std::memory_order_release);
-
+  #ifdef TF_ENABLE_STATS
+  ++ntasks_pushed_wsq;
+  #endif // TF_ENABLE_STATS
   return true;
 }
 
@@ -575,6 +599,9 @@ void BoundedTaskQueue<T, LogSize>::push(O&& o, C&& on_full) {
 
   // queue is full with one additional item (b-t+1)
   if TF_UNLIKELY((b - t) > BufferSize - 1) {
+    #ifdef TF_ENABLE_STATS
+    ++ntasks_not_pushed_wsq;
+    #endif // TF_ENABLE_STATS
     on_full();
     return;
   }
@@ -585,6 +612,9 @@ void BoundedTaskQueue<T, LogSize>::push(O&& o, C&& on_full) {
   
   // original paper uses relaxed here but tsa complains
   _bottom.store(b + 1, std::memory_order_release);
+  #ifdef TF_ENABLE_STATS
+  ++ntasks_pushed_wsq;
+  #endif // TF_ENABLE_STATS
 }
 
 // Function: pop
@@ -613,7 +643,14 @@ T BoundedTaskQueue<T, LogSize>::pop() {
   else {
     _bottom.store(b + 1, std::memory_order_relaxed);
   }
-
+  #ifdef TF_ENABLE_STATS
+  if(item) {
+    ++ntasks_popped_wsq;
+  }
+  else {
+    ++ntasks_not_popped_wsq;
+  }
+  #endif // TF_ENABLE_STATS
   return item;
 }
 
@@ -634,6 +671,14 @@ T BoundedTaskQueue<T, LogSize>::steal() {
       return nullptr;
     }
   }
+  #ifdef TF_ENABLE_STATS
+  if(item) {
+    ++ntasks_stolen_wsq;
+  }
+  else {
+    ++ntasks_not_stolen_wsq;
+  }
+  #endif // TF_ENABLE_STATS
 
   return item;
 }
@@ -659,6 +704,14 @@ T BoundedTaskQueue<T, LogSize>::steal_with_hint(size_t& num_empty_steals) {
   else {
     ++num_empty_steals;
   }
+  #ifdef TF_ENABLE_STATS
+  if(item) {
+    ++ntasks_stolen_wsq;
+  }
+  else {
+    ++ntasks_not_stolen_wsq;
+  }
+  #endif // TF_ENABLE_STATS
   return item;
 }
 
