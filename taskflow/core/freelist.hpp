@@ -18,6 +18,10 @@ class Freelist {
     UnboundedTaskQueue<T> queue;
   };  
   
+  #ifdef TF_ENABLE_STATS
+  uint64_t ntasks_pushed_centralized {0};
+  #endif
+  
   // Here, we don't create just N task queues in the freelist as it will cause
   // the work-stealing loop to spand a lot of time on stealing tasks.
   // Experimentally speaking, we found floor_log2(N) is the best.
@@ -30,6 +34,9 @@ class Freelist {
     auto b = (reinterpret_cast<uintptr_t>(item) >> 16) % _buckets.size();
     std::scoped_lock lock(_buckets[b].mutex);
     _buckets[b].queue.push(item);
+    #ifdef TF_ENABLE_STATS
+    ntasks_pushed_centralized++;
+    #endif
   }
 
   TF_FORCE_INLINE T steal(size_t w) {

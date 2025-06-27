@@ -1,0 +1,3 @@
+model=tf num_threads=8 num_rounds=3 max_value=2000 
+        size     threads     runtime
+        2000           8     421.036

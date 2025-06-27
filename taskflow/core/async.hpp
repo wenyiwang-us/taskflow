@@ -61,9 +61,12 @@ auto Executor::_async(P&& params, F&& f, Topology* tpg, Node* parent) {
 
     std::promise<void> p;
     auto fu{p.get_future()};
-    
+
     _schedule_async_task(animate(
       NSTATE::NONE, ESTATE::ANCHORED, std::forward<P>(params), tpg, parent, 0, 
+      #ifdef  TF_ENABLE_STATS
+      pt::this_worker ? static_cast<int>(pt::this_worker->_id) : -1,
+      #endif // TF_ENABLE_STATS
       std::in_place_type_t<Node::Async>{}, 
       [p=MoC{std::move(p)}, f=std::forward<F>(f)](Runtime& rt, bool reentered) mutable { 
         if(!reentered) {
@@ -84,6 +87,9 @@ auto Executor::_async(P&& params, F&& f, Topology* tpg, Node* parent) {
     auto fu{p.get_future()};
     _schedule_async_task(animate(
       NSTATE::NONE, ESTATE::NONE, std::forward<P>(params), tpg, parent, 0, 
+      #ifdef  TF_ENABLE_STATS
+      pt::this_worker ? static_cast<int>(pt::this_worker->_id) : -1,
+      #endif // TF_ENABLE_STATS
       std::in_place_type_t<Node::Async>{}, 
       [p=make_moc(std::move(p))]() mutable { p.object(); }
     ));
@@ -123,6 +129,9 @@ void Executor::_silent_async(P&& params, F&& f, Topology* tpg, Node* parent) {
   if constexpr (is_runtime_task_v<F> || is_static_task_v<F>) {
     _schedule_async_task(animate(
       NSTATE::NONE, ESTATE::NONE, std::forward<P>(params), tpg, parent, 0,
+      #ifdef  TF_ENABLE_STATS
+      pt::this_worker ? static_cast<int>(pt::this_worker->_id) : -1,
+      #endif // TF_ENABLE_STATS
       std::in_place_type_t<Node::Async>{}, std::forward<F>(f)
     ));
   }

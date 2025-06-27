@@ -63,7 +63,7 @@ std::chrono::microseconds measure_time_taskflow(size_t num_threads, size_t num_n
   auto result = nqueens_taskflow(0, num_threads, buf);
   auto end = std::chrono::high_resolution_clock::now();
 
-  assert(result == answers[num_queens]);
+  assert(result == answers[num_nqueens]);
 
   return std::chrono::duration_cast<std::chrono::microseconds>(end - beg);
 }

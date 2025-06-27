@@ -134,7 +134,11 @@ class Worker {
     BoundedTaskQueue<Node*> _wsq;
 #endif // !TF_USE_XQUEUE
 
-
+#if TF_ENABLE_STATS
+    uint64_t nexec_from_self{0};
+    uint64_t nexec_from_remote {0};
+    uint64_t nexec_from_executor {0};
+#endif
 
     //TF_FORCE_INLINE size_t _rdvtm() {
     //  auto r = _udist(_rdgen);
@@ -142,6 +146,33 @@ class Worker {
     //}
 
 };
+
+// ----------------------------------------------------------------------------
+// Per-thread
+// ----------------------------------------------------------------------------
+
+namespace pt {
+
+/**
+@private
+*/
+  inline thread_local Worker* this_worker {nullptr};
+
+// #ifdef TF_ENABLE_STATS
+  // inline thread_local uint64_t ntasks_pushed_self {0};
+  // inline thread_local uint64_t ntasks_pushed_remote {0};
+  // inline thread_local uint64_t ntasks_not_pushed {0}; // full queue
+
+
+  // inline thread_local uint64_t ntasks_popped_self {0};
+  // inline thread_local uint64_t ntasks_popped_remote {0};
+  // inline thread_local uint64_t ntasks_not_popped {0}; // empty queue
+
+  // inline thread_local uint64_t ntasks_created {0};
+  // inline thread_local uint64_t ntasks_executed_self {0};
+  // inline thread_local uint64_t ntasks_executed_remote {0};
+// #endif // TF_ENABLE_STATS
+}
 
 #if TF_USE_XQUEUE
 // ----------------------------------------------------------------------------
@@ -182,12 +213,24 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
       continue;
     }
     TF_DEBUG(_worker_id, "task not pushed: %p", item);
+    #ifdef TF_ENABLE_STATS
+    ntasks_not_pushed++;
+    #endif // TF_ENABLE_STATS
     return TaskQueueCode::TASK_NOT_PUSHED;
   }
   auto& target_dequeue = target_worker._xq->_dequeues[_last_q];
   target_dequeue.dequeue[target_dequeue.head] = item;
   target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
   target_worker._xq->_last_q_accessed = _last_q;
+
+  #ifdef TF_ENABLE_STATS
+  if(_last_q == 0){
+    ntasks_pushed_self++;
+  }else{
+    ntasks_pushed_remote++;
+  }
+  #endif // TF_ENABLE_STATS
+
   if(_last_q + 1 < _nworkers) {
     _last_q++;
   }else{
@@ -206,6 +249,9 @@ T BoundedXQueue<T, LogSize>::pop(size_t &last_qid) {
     item = _dequeues[0].dequeue[_dequeues[0].tail];
     _dequeues[0].dequeue[_dequeues[0].tail] = nullptr;
     _dequeues[0].tail = (_dequeues[0].tail + 1) & DequeueMask;
+    #ifdef TF_ENABLE_STATS
+    ntasks_popped_self++;
+    #endif // TF_ENABLE_STATS
     TF_DEBUG(_worker_id, "pop task: %p", item);
     return item;
   }
@@ -218,6 +264,13 @@ T BoundedXQueue<T, LogSize>::pop(size_t &last_qid) {
       target_dequeue.dequeue[target_dequeue.tail] = nullptr;
       target_dequeue.tail = (target_dequeue.tail + 1) & DequeueMask;
       last_qid = _last_q_accessed;
+      #ifdef TF_ENABLE_STATS
+      if(last_qid == 0){
+        ntasks_popped_self++;
+      }else{
+        ntasks_popped_remote++;
+      }
+      #endif // TF_ENABLE_STATS
       TF_DEBUG(_worker_id, "pop task: %p", item);
       return item;
     }
@@ -232,6 +285,13 @@ T BoundedXQueue<T, LogSize>::pop(size_t &last_qid) {
       target_dequeue.tail = (target_dequeue.tail + 1) & DequeueMask;
       last_qid = qid;
       TF_DEBUG(_worker_id, "pop task: %p", item);
+      #ifdef TF_ENABLE_STATS
+      if(last_qid == 0){
+        ntasks_popped_self++;
+      }else{
+        ntasks_popped_remote++;
+      }
+      #endif // TF_ENABLE_STATS
       return item;
     }
   }
@@ -244,30 +304,29 @@ T BoundedXQueue<T, LogSize>::pop(size_t &last_qid) {
       target_dequeue.tail = (target_dequeue.tail + 1) & DequeueMask;
       last_qid = qid;
       TF_DEBUG(_worker_id, "pop task: %p", item);
+      #ifdef TF_ENABLE_STATS
+      if(last_qid == 0){
+        ntasks_popped_self++;
+      }else{
+        ntasks_popped_remote++;
+      }
+      #endif // TF_ENABLE_STATS
       return item;
     }
   }
   if(item != nullptr) {
     TF_DEBUG(_worker_id, "pop task: %p", item);
   }
+  #ifdef TF_ENABLE_STATS
+  ntasks_not_popped++;
+  #endif // TF_ENABLE_STATS
   return item; // which is a nullptr
 }
 // #endif // TF_IMPL_XQUEUE
 
 #endif // TF_USE_XQUEUE
 
-// ----------------------------------------------------------------------------
-// Per-thread
-// ----------------------------------------------------------------------------
 
-namespace pt {
-
-/**
-@private
-*/
-inline thread_local Worker* this_worker {nullptr};
-
-}
 
 // ----------------------------------------------------------------------------
 // Class Definition: WorkerView

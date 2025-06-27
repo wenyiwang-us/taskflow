@@ -290,6 +290,14 @@ class Node {
   template <typename... Args>
   Node(nstate_t, estate_t, const DefaultTaskParams&, Topology*, Node*, size_t, Args&&...);
 
+  #ifdef TF_ENABLE_STATS
+  template <typename... Args>
+  Node(nstate_t, estate_t, const TaskParams&, Topology*, Node*, size_t, int, Args&&...);
+
+  template <typename... Args>
+  Node(nstate_t, estate_t, const DefaultTaskParams&, Topology*, Node*, size_t, int, Args&&...);
+  #endif 
+
   size_t num_successors() const;
   size_t num_predecessors() const;
   size_t num_strong_dependencies() const;
@@ -313,12 +321,18 @@ class Node {
   SmallVector<Node*, 4> _edges;
 
   std::atomic<size_t> _join_counter {0};
+
+  #ifdef TF_ENABLE_STATS
+  int _widx {-1};  // worker index
+  #endif
   
   handle_t _handle;
   
   std::unique_ptr<Semaphores> _semaphores;
   
   std::exception_ptr _exception_ptr {nullptr};
+
+
 
   bool _is_cancelled() const;
   bool _is_conditioner() const;
@@ -481,6 +495,55 @@ Node::Node(
   _join_counter {join_counter},
   _handle       {std::forward<Args>(args)...} {
 }
+
+#ifdef TF_ENABLE_STATS
+// Constructor with worker index
+// Constructor
+template <typename... Args>
+Node::Node(
+  nstate_t nstate,
+  estate_t estate,
+  const TaskParams& params,
+  Topology* topology, 
+  Node* parent, 
+  size_t join_counter,
+  int widx,
+  Args&&... args
+) :
+  _nstate       {nstate},
+  _estate       {estate},
+  _name         {params.name},
+  _data         {params.data},
+  _topology     {topology},
+  _parent       {parent},
+  _join_counter {join_counter},
+  _widx         {widx},
+  _handle       {std::forward<Args>(args)...} {
+}
+
+// Constructor
+template <typename... Args>
+Node::Node(
+  nstate_t nstate,
+  estate_t estate,
+  const DefaultTaskParams&,
+  Topology* topology, 
+  Node* parent, 
+  size_t join_counter,
+  int widx,
+  Args&&... args
+) :
+  _nstate       {nstate},
+  _estate       {estate},
+  _topology     {topology},
+  _parent       {parent},
+  _join_counter {join_counter},
+  _widx         {widx},
+  _handle       {std::forward<Args>(args)...} {
+}
+#endif
+
+
 
 // Procedure: _precede
 /*
