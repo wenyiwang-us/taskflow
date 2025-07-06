@@ -53,12 +53,15 @@ size_t spawn_async(size_t N, tf::Runtime& rt) {
   
   size_t res1, res2;
 
+  // printf("silent_async, N: %zu, N-1: %zu\n", N, N-1);
   rt.silent_async([N, &res1](tf::Runtime& rt1){ res1 = spawn_async(N-1, rt1); });
   
+  // printf("spawn_async, N: %zu, N-2: %zu\n", N, N-2);
   // tail optimization
   res2 = spawn_async(N-2, rt);
 
   // use corun to avoid blocking the worker from waiting the two children tasks to finish
+  // printf("corun\n");
   rt.corun();
 
   return res1 + res2;

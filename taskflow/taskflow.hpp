@@ -12,6 +12,16 @@
 
 #pragma message "TF_USE_XQUEUE is enabled"
 
+#define TF_ENABLE_WS 1
+
+#ifdef TF_ENABLE_WS
+
+#pragma message "TF_ENABLE_WS is enabled"
+
+#define MAX_NOPS_EMPTY 10000
+
+#endif
+
 #endif
 
 #define TF_ENABLE_STATS 1

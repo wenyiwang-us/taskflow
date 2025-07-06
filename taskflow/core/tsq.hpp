@@ -38,8 +38,14 @@ namespace tf {
 #if TF_USE_XQUEUE
   // enum class for task queue push return code
   enum class TaskQueueCode {
-    TASK_NOT_PUSHED,
-    TASK_PUSHED
+    TASK_PUSHED, // returned by xq.push and xq.load_balance
+    TASK_NOT_PUSHED, // returned by xq.push
+    NO_REQUEST // returned by xq.load_balance
+  };
+
+  enum class WorkerState {
+    IDLE,
+    REQUEST_STEAL,
   };
 
 // ----------------------------------------------------------------------------
@@ -47,22 +53,33 @@ namespace tf {
 // ----------------------------------------------------------------------------
   template <typename T, size_t LogSize = TF_DEFAULT_BOUNDED_XQUEUE_LOG_SIZE>
   class BoundedXQueue {
+    // Dequeue data structure
+    struct XDequeue {
+      T* dequeue; // Make sure it is get sequentially allocated
+      int64_t head {0};
+      int64_t tail {0};
+      // alignas(2 * TF_CACHELINE_SIZE) int64_t head {0};
+      // alignas(2 * TF_CACHELINE_SIZE) int64_t tail {0};
+    };
+
     static_assert(std::is_pointer_v<T>, "<XQueue>: T must be a pointer type.");
 
-    // same as the bounded task queue
+    // Longer Master Dequeue
+    constexpr static size_t MasterDequeueSize = int64_t{1} << (LogSize + 3);
+    constexpr static size_t MasterDequeueMask = (MasterDequeueSize - 1);
+
+    // Auxiliary Dequeue
     constexpr static int64_t DequeueSize = int64_t{1} << LogSize;
     constexpr static int64_t DequeueMask = (DequeueSize - 1);
 
+    static_assert((MasterDequeueSize >= 2) &&
+                  ((MasterDequeueSize & (MasterDequeueSize - 1)) == 0));
+    
     static_assert((DequeueSize >= 2) &&
                   ((DequeueSize & (DequeueSize - 1)) == 0));
+    
 
-    // some queue data structure
-    struct XDequeue {
-      T dequeue[DequeueSize];
-      alignas(2 * TF_CACHELINE_SIZE) int64_t head {0};
-      alignas(2 * TF_CACHELINE_SIZE) int64_t tail {0};
-    };
-
+   
     // 2D array of type T with dynamic outer dimension
     // WW: This now is allocated on the heap while TF's bounded task queue is
     // allocated on the stack WW: Need to justify if this is a good idea
@@ -70,9 +87,13 @@ namespace tf {
     size_t _nworkers {-1}; // Store the outer dimension size
     size_t _worker_id {-1}; // Current worker id
     size_t _last_q {0};    // Points to the last queue that was used to push a task
-    size_t _last_q_accessed {0}; // Points to the last queue that was accessed
+    uint64_t _nops_empty {0}; // number of empty queue pop, used to periodically send request
+    size_t _last_q_popped {0}; // points to the last queue that was popped from
 
-
+    // Shared by all other workers
+    alignas(2 * TF_CACHELINE_SIZE) size_t _last_q_accessed {0}; // points to the last queue that was accessed
+    alignas(2 * TF_CACHELINE_SIZE) uint64_t _steal_request {0}; // steal request from other workers (thief)
+    alignas(2 * TF_CACHELINE_SIZE) uint64_t _round {1}; // round number of reading the steal request
 
   public:
 
@@ -90,17 +111,25 @@ namespace tf {
     // Now it is the same as original xqueue implementation.
     // We may need to re-consider how to deal with queue full situation. Or
     // prioritize pushing to local
+    // TODO: an alternative is to use callback to handle the queue full, 
+    // but I suspect it will cause deep recursion.
     TaskQueueCode push(T item);
 
     /**
     @brief pops out an item from the queue
-
-    @param worker_id the worker id to pop from
     @return the popped item or nullptr if the queue is empty
     */
-    T pop(size_t &last_qid);
+    T pop();
+
+
+    /**
+    @brief 
+    */
 
     std::vector<Worker> *_workers;
+    std::default_random_engine _rdgen;
+    std::uniform_int_distribution<size_t> _udist;
+
 
     #ifdef TF_ENABLE_STATS
     uint64_t ntasks_pushed_self {0};
@@ -109,8 +138,24 @@ namespace tf {
     uint64_t ntasks_popped_self {0};
     uint64_t ntasks_popped_remote {0};
     uint64_t ntasks_not_popped {0};
+
+    #ifdef TF_ENABLE_WS
+    // Thief side
+    uint64_t nrequests_steal_called {0};
+    uint64_t nrequests_attempted {0};
+    uint64_t nrequests_sent {0};
+    // Victim side
+    uint64_t nhandled_attempted {0};
+    uint64_t nhandled_stolen {0};
+    uint64_t nhandled_not_stolen {0};
+
+    #endif // TF_ENABLE_WS
     #endif // TF_ENABLE_STATS
     
+    private:
+
+    inline TaskQueueCode _do_load_balance(T item);
+    inline void _request_steal();
   };
 
 #endif // TF_USE_XQUEUE
@@ -614,6 +659,7 @@ void BoundedTaskQueue<T, LogSize>::push(O&& o, C&& on_full) {
   _bottom.store(b + 1, std::memory_order_release);
   #ifdef TF_ENABLE_STATS
   ++ntasks_pushed_wsq;
+  // printf("q size: %lu\n", size());
   #endif // TF_ENABLE_STATS
 }
 
