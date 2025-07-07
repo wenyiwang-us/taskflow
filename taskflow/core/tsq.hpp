@@ -66,6 +66,8 @@ namespace tf {
 
     // Longer Master Dequeue
     constexpr static size_t MasterDequeueSize = int64_t{1} << (LogSize + 3);
+    constexpr static size_t ExecutorDequeueSize = int64_t{1} << (LogSize + 4);
+    constexpr static size_t ExecutorDequeueMask = (ExecutorDequeueSize - 1);
     constexpr static size_t MasterDequeueMask = (MasterDequeueSize - 1);
 
     // Auxiliary Dequeue
@@ -115,6 +117,9 @@ namespace tf {
     // but I suspect it will cause deep recursion.
     TaskQueueCode push(T item);
 
+    // Called by the executor to push
+    TaskQueueCode executor_push(T item);
+
     /**
     @brief pops out an item from the queue
     @return the popped item or nullptr if the queue is empty
@@ -154,7 +159,7 @@ namespace tf {
     
     private:
 
-    inline TaskQueueCode _do_load_balance(T item);
+    // inline TaskQueueCode _do_load_balance(T item);
     inline void _request_steal();
   };
 

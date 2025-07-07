@@ -1889,16 +1889,18 @@ inline void Executor::_schedule(Worker& worker, Node* node) {
 }
 
 // Procedure: _schedule
-inline void Executor::_schedule(Node* node) {
-  // TF_THROW("XQueue does not support _schedule(Node*)");
-  if(pt::this_worker) {
+inline void Executor::_schedule(Node *node) {
+// TF_THROW("XQueue does not support _schedule(Node*)");
+  if (pt::this_worker) {
     _schedule(*(pt::this_worker), node);
   } else {
-    _schedule(_workers[_next_xq_wid], node);
-    // TODO: need some optimization here
-    if(TF_LIKELY(++_next_xq_wid < _num_workers)) {
-    }else{
-      _next_xq_wid = 0;
+    // called by the executor
+    while(_workers[_next_xq_wid]._xq->executor_push(node) != TaskQueueCode::TASK_PUSHED){
+      if(++_next_xq_wid < _num_workers){
+        continue;
+      }else{
+        _next_xq_wid = 0;
+      }
     }
   }
 }

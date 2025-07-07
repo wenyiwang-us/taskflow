@@ -191,23 +191,23 @@ _udist(0, nworkers - 1) {
   // TODO: This is a temporary solution to seed the random engine
   _rdgen.seed(static_cast<std::default_random_engine::result_type>(worker_id));
 
-  _dequeues = new XDequeue[_nworkers];
+  _dequeues = new XDequeue[_nworkers + 1]; // addtional one for the executor
 
+  // Master Dequeue, set all values to nullptr
   _dequeues[0].dequeue = new T[MasterDequeueSize];
-  // set all values to nullptr using memset
   memset(_dequeues[0].dequeue, 0, MasterDequeueSize * sizeof(T));
-  // printf("MasterDequeueSize: %ld\n", MasterDequeueSize);
-  
+
   for (int64_t i = 1; i < _nworkers; i++) {
     _dequeues[i].dequeue = new T[DequeueSize];
     memset(_dequeues[i].dequeue, 0, DequeueSize * sizeof(T));
   }
-  
+  _dequeues[_nworkers].dequeue = new T[ExecutorDequeueSize];
+  memset(_dequeues[_nworkers].dequeue, 0, ExecutorDequeueSize * sizeof(T));
 
 }
 template <typename T, size_t LogSize>
 BoundedXQueue<T, LogSize>::~BoundedXQueue() {
-  for (int64_t i = 0; i < _nworkers; i++) {
+  for (int64_t i = 0; i < _nworkers + 1; i++) {
     delete [] _dequeues[i].dequeue;
   }
   delete [] _dequeues;
@@ -262,9 +262,9 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
       if(num_tries < 25) {
         continue;
       }
-      #ifdef TF_ENABLE_WS
+      #ifdef TF_ENABLE_STATS
       nhandled_not_stolen++;
-      #endif // TF_ENABLE_WS
+      #endif // TF_ENABLE_STATS
 
       can_push = false;
       _round++; // able to accept new request
@@ -284,9 +284,9 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
       target_worker._xq->_last_q_accessed = target_qid;
       // ready to accept new request
       _round++;
-      #ifdef TF_ENABLE_WS
+      #ifdef TF_ENABLE_STATS
       nhandled_stolen++;
-      #endif // TF_ENABLE_WS
+      #endif // TF_ENABLE_STATS
       TF_DEBUG(_worker_id, "move task: %p to worker %ld, qid: %ld", task, target_worker_id, target_qid);
       ret = TaskQueueCode::TASK_PUSHED;
     }
@@ -314,66 +314,81 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
   return ret;
 }
 
-
-
 template <typename T, size_t LogSize>
-TaskQueueCode BoundedXQueue<T, LogSize>::_do_load_balance(T item) {
-  // Check the steal request
-  #ifdef TF_ENABLE_WS
-  nhandled_attempted++;
-  #endif // TF_ENABLE_WS
-  if(TF_UNLIKELY(MSG_REQ2ROUND(_steal_request) == _round)) {
-
-    // try push the task to the target worker's aux queue
-    size_t num_tries = 0;
-    size_t target_worker_id = MSG_REQ2TID(_steal_request);
-    size_t target_qid = target_worker_id < _worker_id ? target_worker_id - _worker_id + _nworkers : target_worker_id - _worker_id;
-    Worker& target_worker = (*_workers)[target_worker_id];
-    while(target_worker._xq->_dequeues[target_qid]
-                .dequeue[target_worker._xq->_dequeues[target_qid].head] !=
-            nullptr) {
-      num_tries++;
-      if(num_tries < 25) {
-        continue;
-      }
-      #ifdef TF_ENABLE_WS
-      nhandled_not_stolen++;
-      #endif // TF_ENABLE_WS
-      _round++;
-      return TaskQueueCode::TASK_NOT_PUSHED;
+TaskQueueCode BoundedXQueue<T, LogSize>::executor_push(T item) {
+  // printf("Worker %ld: executor_push, head: %ld\n", _worker_id, _dequeues[_nworkers].head);
+  size_t num_tries = 0;
+  while(_dequeues[_nworkers].dequeue[_dequeues[_nworkers].head] != nullptr) {
+    num_tries++;
+    if(num_tries < 25) {
+      continue;
     }
-    // push to aux queue
-    auto& target_dequeue = target_worker._xq->_dequeues[target_qid];
-    target_dequeue.dequeue[target_dequeue.head] = item;
-    target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
-    target_worker._xq->_last_q_accessed = target_qid;
-    // ready to accept new request
-    _round++;
-    #ifdef TF_ENABLE_WS
-    nhandled_stolen++;
-    #endif // TF_ENABLE_WS
-    return TaskQueueCode::TASK_PUSHED;
-  }else{
-    return TaskQueueCode::NO_REQUEST;
+    return TaskQueueCode::TASK_NOT_PUSHED;
   }
+  _dequeues[_nworkers].dequeue[_dequeues[_nworkers].head] = item;
+  _dequeues[_nworkers].head = (_dequeues[_nworkers].head + 1) & ExecutorDequeueMask;
+  _last_q_accessed = _nworkers;
+  return TaskQueueCode::TASK_PUSHED;
 }
+
+// template <typename T, size_t LogSize>
+// TaskQueueCode BoundedXQueue<T, LogSize>::_do_load_balance(T item) {
+//   // Check the steal request
+//   #ifdef TF_ENABLE_WS
+//   nhandled_attempted++;
+//   #endif // TF_ENABLE_WS
+//   if(TF_UNLIKELY(MSG_REQ2ROUND(_steal_request) == _round)) {
+
+//     // try push the task to the target worker's aux queue
+//     size_t num_tries = 0;
+//     size_t target_worker_id = MSG_REQ2TID(_steal_request);
+//     size_t target_qid = target_worker_id < _worker_id ? target_worker_id - _worker_id + _nworkers : target_worker_id - _worker_id;
+//     Worker& target_worker = (*_workers)[target_worker_id];
+//     while(target_worker._xq->_dequeues[target_qid]
+//                 .dequeue[target_worker._xq->_dequeues[target_qid].head] !=
+//             nullptr) {
+//       num_tries++;
+//       if(num_tries < 25) {
+//         continue;
+//       }
+//       #ifdef TF_ENABLE_WS
+//       nhandled_not_stolen++;
+//       #endif // TF_ENABLE_WS
+//       _round++;
+//       return TaskQueueCode::TASK_NOT_PUSHED;
+//     }
+//     // push to aux queue
+//     auto& target_dequeue = target_worker._xq->_dequeues[target_qid];
+//     target_dequeue.dequeue[target_dequeue.head] = item;
+//     target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
+//     target_worker._xq->_last_q_accessed = target_qid;
+//     // ready to accept new request
+//     _round++;
+//     #ifdef TF_ENABLE_WS
+//     nhandled_stolen++;
+//     #endif // TF_ENABLE_WS
+//     return TaskQueueCode::TASK_PUSHED;
+//   }else{
+//     return TaskQueueCode::NO_REQUEST;
+//   }
+// }
 
 template <typename T, size_t LogSize>
 inline void BoundedXQueue<T, LogSize>::_request_steal() {
   // Invalidate existing request to further enforce local first policy
   _round++;
   // Pick a random worker to steal from
-  #ifdef TF_ENABLE_WS
+  #ifdef TF_ENABLE_STATS
   nrequests_steal_called++;
-  #endif // TF_ENABLE_WS
+  #endif // TF_ENABLE_STATS
 
   if(TF_LIKELY(_nops_empty > 0 && _nops_empty < MAX_NOPS_EMPTY)) {
     _nops_empty++;
     return;
   }
-  #ifdef TF_ENABLE_WS
+  #ifdef TF_ENABLE_STATS
   nrequests_attempted++;
-  #endif // TF_ENABLE_WS
+  #endif // TF_ENABLE_STATS
   _nops_empty = 0;
   // Get another worker to steal from
   size_t vtm = _udist(_rdgen);
@@ -386,9 +401,9 @@ inline void BoundedXQueue<T, LogSize>::_request_steal() {
   Worker& target_worker = (*_workers)[vtm];
   if(MSG_REQ2ROUND(target_worker._xq->_steal_request) < target_worker._xq->_round) {
   // if((target_worker._xq->_steal_request & (1UL << 40)) < target_worker._xq->_round) {
-    #ifdef TF_ENABLE_WS
+    #ifdef TF_ENABLE_STATS
     nrequests_sent++;
-    #endif // TF_ENABLE_WS
+    #endif // TF_ENABLE_STATS
     target_worker._xq->_steal_request = MSG_TID2REQ(_worker_id) | target_worker._xq->_round;
   }
 
@@ -427,10 +442,11 @@ T BoundedXQueue<T, LogSize>::pop() {
   // Then, pop tasks from the last accessed queue
   if (_last_q_accessed > 0) {
     auto& target_dequeue = _dequeues[_last_q_accessed];
+    size_t mask = _last_q_accessed == _nworkers ? ExecutorDequeueMask : DequeueMask;
     if (target_dequeue.dequeue[target_dequeue.tail] != nullptr) {
       item = target_dequeue.dequeue[target_dequeue.tail];
       target_dequeue.dequeue[target_dequeue.tail] = nullptr;
-      target_dequeue.tail = (target_dequeue.tail + 1) & DequeueMask;
+      target_dequeue.tail = (target_dequeue.tail + 1) & mask;
       // _last_q_popped = _last_q_accessed;
       // last_qid = _last_q_accessed;
       #ifdef TF_ENABLE_STATS
@@ -444,12 +460,13 @@ T BoundedXQueue<T, LogSize>::pop() {
   }
 
   // Update: try to pop from closest queue, a comprehensive search
-  for(size_t qid = 1; qid < _nworkers; qid++) {
+  for(size_t qid = 1; qid < _nworkers + 1; qid++) {
     auto& target_dequeue = _dequeues[qid];
+    size_t mask = qid == _nworkers ? ExecutorDequeueMask : DequeueMask;
     if(target_dequeue.dequeue[target_dequeue.tail] != nullptr) {
       item = target_dequeue.dequeue[target_dequeue.tail];
       target_dequeue.dequeue[target_dequeue.tail] = nullptr;
-      target_dequeue.tail = (target_dequeue.tail + 1) & DequeueMask;
+      target_dequeue.tail = (target_dequeue.tail + 1) & mask;
       #ifdef TF_ENABLE_STATS
       ntasks_popped_remote++;
       #endif // TF_ENABLE_STATS
