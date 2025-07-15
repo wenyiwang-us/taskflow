@@ -8,10 +8,12 @@ void reduce_sum(
   ) {
 
   std::cout << std::setw(12) << "size"
+            << std::setw(12) << "threads"
             << std::setw(12) << "runtime"
             << std::endl;
 
-  for(size_t N=10; N<=1000000000; N = N*10) {
+  // for(size_t N=10; N<=1000000000; N = N*10) {
+    size_t N = 1000000000;
 
     vec.resize(N);
 
@@ -21,9 +23,9 @@ void reduce_sum(
       if(model == "tf") {
         runtime += measure_time_taskflow(num_threads).count();
       }
-      else if(model == "tbb") {
-        runtime += measure_time_tbb(num_threads).count();
-      }
+      // else if(model == "tbb") {
+      //   runtime += measure_time_tbb(num_threads).count();
+      // }
       else if(model == "omp") {
         runtime += measure_time_omp(num_threads).count();
       }
@@ -31,9 +33,10 @@ void reduce_sum(
     }
 
     std::cout << std::setw(12) << N
+              << std::setw(12) << num_threads
               << std::setw(12) << runtime / num_rounds / 1e3
               << std::endl;
-  }
+  // }
 }
 
 int main(int argc, char* argv[]) {

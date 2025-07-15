@@ -4,7 +4,11 @@
 #include "tsq.hpp"
 #include "atomic_notifier.hpp"
 #include "nonblocking_notifier.hpp"
-
+#include <x86intrin.h>
+#include <fstream>
+#include <string>
+#include <filesystem>
+#include <sstream>
 
 /**
 @file worker.hpp
@@ -35,26 +39,144 @@ namespace tf {
   #endif
 #endif
 
-// ----------------------------------------------------------------------------
-// Class Definition: Worker
-// ----------------------------------------------------------------------------
+#ifdef TF_ENABLE_PROFILE  
+#define EVENT_END_SHIFT 5
+  enum class EventType {
+    EVENT_NULL,
+    EXECUTOR,
+    THREAD,
+    TASK,
+    // QUEUE_PUSH,
+    // QUEUE_POP,
+    // RUNTIME,
+    CORUN_UNTIL,
+    EVENT_DUMP,
 
-/**
-@class Worker
+    N_EVENTS,
 
-@brief class to create a worker in an executor
+    EXECUTOR_END = EXECUTOR << EVENT_END_SHIFT,
+    THREAD_END = THREAD << EVENT_END_SHIFT,
+    TASK_END = TASK << EVENT_END_SHIFT,
+    // QUEUE_PUSH_END = QUEUE_PUSH << EVENT_END_SHIFT,
+    // QUEUE_POP_END = QUEUE_POP << EVENT_END_SHIFT,
+    // RUNTIME_END = RUNTIME << EVENT_END_SHIFT,
+    CORUN_UNTIL_END = CORUN_UNTIL << EVENT_END_SHIFT,
+    EVENT_DUMP_END = EVENT_DUMP << EVENT_END_SHIFT,
 
-The class is primarily used by the executor to perform work-stealing algorithm.
-Users can access a worker object and alter its property
-(e.g., changing the thread affinity in a POSIX-like system)
-using tf::WorkerInterface.
-*/
+  };
 
-class Worker {
+  class PerThreadTaskProfiler {
+    public:
+    PerThreadTaskProfiler(size_t worker_id) : _worker_id(worker_id) {
+      const char* folder = std::getenv("TF_PROFILE_PATH");
+      const char* prefix = std::getenv("TF_PROFILE_PREFIX"); 
+      _folder_name = folder ? folder : "tf_profile";
+      std::string tmp = prefix ? std::string(prefix) + "_" + std::to_string(worker_id) : "worker_" + std::to_string(worker_id);
+      _filename = _folder_name + "/" + tmp + ".csv";
 
-  friend class Executor;
-  friend class Runtime;
-  friend class WorkerView;
+      // Create folder if not exists
+      std::filesystem::create_directories(_folder_name);
+
+      // Allocate arrays on heap and initialize to zeros
+      _ts = new uint64_t[MAX_EVENTS]();
+      _events = new EventType[MAX_EVENTS]();
+      _hfref = new uint64_t[MAX_EVENTS]();
+      _lfref = new uint64_t[MAX_EVENTS]();
+      // std::fill(_events, _events + MAX_EVENTS, EventType::EVENT_NULL);
+    }
+
+    ~PerThreadTaskProfiler() {
+      delete[] _ts;
+      delete[] _events;
+      delete[] _hfref;
+      delete[] _lfref;
+    }
+
+    inline void record(EventType event, uint64_t hfref, uint64_t lfref){
+      if(_eidx >= MAX_EVENTS){
+        TF_THROW("Too many events");
+        exit(1);
+      }
+      unsigned int aux;
+      _ts[_eidx] = _rdtscp(&aux);
+      _events[_eidx] = event;
+      _hfref[_eidx] = hfref;
+      _lfref[_eidx] = lfref;
+      _eidx++;
+    }
+
+    inline void dump(){
+      // Open CSV file for writing
+      std::ofstream csv_file(_filename);
+      if (!csv_file.is_open()) {
+        fprintf(stderr, "Failed to open CSV file for writing: %s\n", _filename.c_str());
+        exit(1);
+        return;
+      }
+      
+      // Write CSV header
+      csv_file << "timestamp,event_type,hfref,lfref\n";
+      
+      // Write all events to CSV
+      for(size_t i = 0; i < _eidx; i++){
+        csv_file << _ts[i] << "," 
+                 << static_cast<int>(_events[i]) << "," 
+                 << _hfref[i] << "," 
+                 << _lfref[i] << "\n";
+      }
+      
+      csv_file.close();
+      printf("Dumped %zu events to %s\n", _eidx, _filename.c_str());
+    }
+
+    inline uint64_t get_ref(EventType event) {
+      return _ref[static_cast<size_t>(event)];
+    }
+
+    inline uint64_t get_new_ref(EventType event) {
+      return ++_ref[static_cast<size_t>(event)];
+    }
+
+    private:
+    constexpr static size_t MAX_EVENTS = 1 << 26; // 128M events
+    uint64_t _eidx {0};
+    uint64_t* _ts;
+    EventType* _events;
+    uint64_t* _hfref;
+    uint64_t* _lfref;
+
+    uint64_t _ref[static_cast<size_t>(EventType::N_EVENTS)] {0};
+
+    int _worker_id {-1}; // -1 means executor
+    
+    std::string _folder_name;
+    std::string _filename;
+    
+
+  };
+
+#endif // TF_ENABLE_PROFILE
+
+  // ----------------------------------------------------------------------------
+  // Class Definition: Worker
+  // ----------------------------------------------------------------------------
+
+  /**
+  @class Worker
+
+  @brief class to create a worker in an executor
+
+  The class is primarily used by the executor to perform work-stealing
+  algorithm. Users can access a worker object and alter its property (e.g.,
+  changing the thread affinity in a POSIX-like system) using
+  tf::WorkerInterface.
+  */
+
+  class Worker {
+
+    friend class Executor;
+    friend class Runtime;
+    friend class WorkerView;
 
   public:
     /**
@@ -111,8 +233,35 @@ class Worker {
       }
     }
 
+
     BoundedXQueue<Node*> *_xq {nullptr};
 #endif // TF_USE_XQUEUE
+
+#ifdef TF_ENABLE_STATS
+    inline void invoke_start() {
+      unsigned int aux;
+      start_ts = _rdtscp(&aux);
+    }
+
+    inline void invoke_end() {
+      unsigned int aux;
+      auto duration = _rdtscp(&aux) - start_ts;
+      if (duration > max_exec_time) {
+        max_exec_time = duration;
+      }
+      if (min_exec_time == 0) {
+        min_exec_time = duration;
+      }
+      if (duration < min_exec_time) {
+        min_exec_time = duration;
+      }
+    }
+
+#endif // TF_ENABLE_STATS
+
+#ifdef TF_ENABLE_PROFILE
+  PerThreadTaskProfiler* _profiler;
+#endif
 
   private:
   
@@ -135,17 +284,21 @@ class Worker {
 #endif // !TF_USE_XQUEUE
 
 #if TF_ENABLE_STATS
-    uint64_t nexec_from_self{0};
+    uint64_t nexec_from_self {0};
     uint64_t nexec_from_remote {0};
     uint64_t nexec_from_executor {0};
+
+    uint64_t max_exec_time {0};
+    uint64_t min_exec_time {0};
+    uint64_t avg_exec_time {0};
+    uint64_t start_ts {0};
 #endif
 
     //TF_FORCE_INLINE size_t _rdvtm() {
     //  auto r = _udist(_rdgen);
     //  return r + (r >= _id);
     //}
-
-};
+  };
 
 // ----------------------------------------------------------------------------
 // Per-thread
@@ -197,7 +350,7 @@ _udist(0, nworkers - 1) {
   _dequeues[0].dequeue = new T[MasterDequeueSize];
   memset(_dequeues[0].dequeue, 0, MasterDequeueSize * sizeof(T));
 
-  for (int64_t i = 1; i < _nworkers; i++) {
+  for (size_t i = 1; i < _nworkers; i++) {
     _dequeues[i].dequeue = new T[DequeueSize];
     memset(_dequeues[i].dequeue, 0, DequeueSize * sizeof(T));
   }
@@ -207,7 +360,7 @@ _udist(0, nworkers - 1) {
 }
 template <typename T, size_t LogSize>
 BoundedXQueue<T, LogSize>::~BoundedXQueue() {
-  for (int64_t i = 0; i < _nworkers + 1; i++) {
+  for (size_t i = 0; i < _nworkers + 1; i++) {
     delete [] _dequeues[i].dequeue;
   }
   delete [] _dequeues;
@@ -225,7 +378,7 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
   // If no, try load balance first
   // If load balance fails, try to push to the master queue
   // If master queue is full, return NOT_PUSHED
-  TaskQueueCode ret = TaskQueueCode::TASK_NOT_PUSHED;
+  TaskQueueCode ret {TaskQueueCode::TASK_NOT_PUSHED};
   // TODO, maybe change to original implementation with while loop
 
   // printf("push task: %p to master queue, tail: %ld, head: %ld\n", item, _dequeues[0].tail, _dequeues[0].head);
@@ -240,7 +393,6 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
     #ifdef TF_ENABLE_STATS
     ntasks_pushed_self++;
     #endif // TF_ENABLE_STATS
-    
     return TaskQueueCode::TASK_PUSHED;
   }
 
@@ -249,11 +401,11 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
   if(TF_UNLIKELY(MSG_REQ2ROUND(_steal_request) == _round)) {
 
     // try push the task to the target worker's aux queue
-    size_t num_tries = 0;
-    bool can_push = true;
-    size_t target_worker_id = MSG_REQ2TID(_steal_request);
-    size_t target_qid = target_worker_id < _worker_id ? target_worker_id - _worker_id + _nworkers : target_worker_id - _worker_id;
-    Worker& target_worker = (*_workers)[target_worker_id];
+    size_t num_tries {0};
+    bool can_push {true};
+    size_t target_worker_id {MSG_REQ2TID(_steal_request)};
+    size_t target_qid {target_worker_id < _worker_id ? target_worker_id - _worker_id + _nworkers : target_worker_id - _worker_id};
+    Worker& target_worker {(*_workers)[target_worker_id]};
 
     while(target_worker._xq->_dequeues[target_qid]
                 .dequeue[target_worker._xq->_dequeues[target_qid].head] !=
@@ -274,7 +426,7 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
     if(can_push) {
       // transfer the first task in the master queue to the target worker's aux queue
       // pop
-      T task = _dequeues[0].dequeue[_dequeues[0].tail];
+      T task {_dequeues[0].dequeue[_dequeues[0].tail]};
       _dequeues[0].dequeue[_dequeues[0].tail] = nullptr;
       _dequeues[0].tail = (_dequeues[0].tail + 1) & MasterDequeueMask;
       // push

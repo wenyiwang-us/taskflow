@@ -28,8 +28,8 @@
 #
 # Output:
 #   An executable file named using the first source file's name, followed by
-#   suffixes for the framework, build type, and sanitizer.
-#   Example: for './compile.sh xtf debug asan main.cpp', the output is 'main_xtf_debug_asan'.
+#   suffixes for the framework, build type, and sanitizer, placed in the 'bins' directory.
+#   Example: for './compile.sh xtf debug asan main.cpp', the output is 'bins/main_xtf_debug_asan'.
 # ---
 
 # 1. Validate that the correct number of arguments has been provided.
@@ -114,13 +114,14 @@ case "$SANITIZER" in
         ;;
 esac
 
-# 7. Determine the final output filename.
+# 7. Create bins directory if it doesn't exist and determine the final output filename.
 # The name is based on the first source file provided.
+mkdir -p bins
 FIRST_SOURCE="${SOURCE_FILES[0]}"
 # Get the filename without the directory path or extension.
 BASENAME=$(basename "$FIRST_SOURCE")
 BASENAME_NO_EXT="${BASENAME%.*}"
-OUTPUT_FILE="${BASENAME_NO_EXT}${FRAMEWORK_SUFFIX}${BUILD_SUFFIX}${SANITIZER_SUFFIX}"
+OUTPUT_FILE="bins/${BASENAME_NO_EXT}${FRAMEWORK_SUFFIX}${BUILD_SUFFIX}${SANITIZER_SUFFIX}"
 
 # 8. Construct and execute the final compilation command.
 # Using an array for the command is safer as it correctly handles spaces in paths.

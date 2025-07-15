@@ -24,13 +24,15 @@
 
 #endif
 
-// #define TF_ENABLE_STATS 1
+#define TF_ENABLE_STATS 1
 
 #ifdef TF_ENABLE_STATS
 
 #pragma message "TF_ENABLE_STATS is enabled"
 
 #endif
+
+// #define TF_ENABLE_PROFILER 1
 
 
 #include "core/executor.hpp"

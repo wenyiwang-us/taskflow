@@ -9,10 +9,12 @@ void binary_tree(
   ) {
 
   std::cout << std::setw(12) << "size"
+            << std::setw(12) << "threads"
             << std::setw(12) << "runtime"
             << std::endl;
 
-  for(size_t i=1; i<=num_layers; ++i) {
+  // for(size_t i=1; i<=num_layers; ++i) {
+    size_t i = num_layers;
 
     double runtime {0.0};
 
@@ -20,9 +22,9 @@ void binary_tree(
       if(model == "tf") {
         runtime += measure_time_taskflow(i, num_threads).count();
       }
-      else if(model == "tbb") {
-        runtime += measure_time_tbb(i, num_threads).count();
-      }
+      // else if(model == "tbb") {
+      //   runtime += measure_time_tbb(i, num_threads).count();
+      // }
       else if(model == "omp") {
         runtime += measure_time_omp(i, num_threads).count();
       }
@@ -30,9 +32,10 @@ void binary_tree(
     }
 
     std::cout << std::setw(12) << (1 << i)
+              << std::setw(12) << num_threads
               << std::setw(12) << runtime / num_rounds / 1e3
               << std::endl;
-  }
+  // }
 }
 
 int main(int argc, char* argv[]) {

@@ -5,6 +5,7 @@
 #include "async_task.hpp"
 #include "freelist.hpp"
 
+
 /**
 @file executor.hpp
 @brief executor include file
@@ -59,6 +60,10 @@ class Executor {
   friend class Algorithm;
 
   public:
+
+  #ifdef TF_ENABLE_PROFILE
+    PerThreadTaskProfiler _profiler;
+  #endif
 
   /**
   @brief constructs the executor with @c N worker threads
@@ -1149,6 +1154,9 @@ class Executor {
 #if TF_USE_XQUEUE
 // Custom Executor Constructor for XQueue
 inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix):
+#ifdef TF_ENABLE_PROFILE
+  _profiler(-1),
+#endif
   _num_workers(N),
   _workers  (N),
   _notifier (N),
@@ -1183,6 +1191,9 @@ inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix):
 #else
 // Constructor
 inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix) :
+#ifdef TF_ENABLE_PROFILE
+  _profiler(-1),
+#endif
   _workers  (N),
   _notifier (N),
   _buffers  (N),
@@ -1250,6 +1261,24 @@ inline void Executor::_shutdown() {
 
 #ifdef TF_ENABLE_STATS
 inline void Executor::_collect_stats() {
+  // Create stats directory if not exists
+  const char* folder = std::getenv("TF_STATS_PATH");
+  std::string folder_name = folder ? folder : "tf_stats";
+  std::filesystem::create_directories(folder_name);
+
+  // Open CSV file for writing
+  std::string filename = folder_name + "/worker_stats.csv";
+  std::ofstream csv_file(filename);
+  if (!csv_file.is_open()) {
+    fprintf(stderr, "Failed to open CSV file for writing: %s\n", filename.c_str());
+    return;
+  }
+
+  uint64_t nexec_from_self = 0;
+  uint64_t nexec_from_remote = 0;
+  uint64_t nexec_from_executor = 0;
+  csv_file << "worker_id,nexec_from_self,nexec_from_remote,nexec_from_executor";
+
   #ifdef TF_USE_XQUEUE
   uint64_t ntasks_pushed_self = 0;
   uint64_t ntasks_pushed_remote = 0;
@@ -1257,6 +1286,8 @@ inline void Executor::_collect_stats() {
   uint64_t ntasks_popped_remote = 0;
   uint64_t ntasks_not_pushed = 0;
   uint64_t ntasks_not_popped = 0;
+  csv_file << ",ntasks_pushed_self,ntasks_pushed_remote,ntasks_popped_self,ntasks_popped_remote,ntasks_not_pushed,ntasks_not_popped";
+  
   #ifdef TF_ENABLE_WS
   // Thief side
   uint64_t nrequests_steal_called = 0;
@@ -1266,6 +1297,8 @@ inline void Executor::_collect_stats() {
   uint64_t nhandled_attempted = 0;
   uint64_t nhandled_stolen = 0;
   uint64_t nhandled_not_stolen = 0;
+  csv_file << ",nrequests_attempted,nrequests_sent,nhandled_attempted,nhandled_stolen,nhandled_not_stolen";
+
   #endif // TF_ENABLE_WS
 
   #else
@@ -1275,10 +1308,10 @@ inline void Executor::_collect_stats() {
   uint64_t ntasks_not_popped_wsq = 0;
   uint64_t ntasks_stolen_wsq = 0;
   uint64_t ntasks_not_stolen_wsq = 0;
+  csv_file << ",ntasks_pushed_wsq,ntasks_not_pushed_wsq,ntasks_popped_wsq,ntasks_not_popped_wsq,ntasks_stolen_wsq,ntasks_not_stolen_wsq";
+
   #endif
-  uint64_t nexec_from_self = 0;
-  uint64_t nexec_from_remote = 0;
-  uint64_t nexec_from_executor = 0;
+  csv_file << "\n";
 
   for(auto& w : _workers) {
     #ifdef TF_USE_XQUEUE
@@ -1359,7 +1392,8 @@ inline void Executor::_collect_stats() {
     "WSQ-pop = %lu (%.2f%%), WSQ-not-popped = %lu (%.2f%%), "
     "WSQ-stolen = %lu (%.2f%%), WSQ-not-stolen = %lu (%.2f%%), "
     #endif
-    "Self-exec = %lu (%.2f%%), Remote-exec = %lu (%.2f%%), Executor-exec = %lu (%.2f%%)\n",
+    "Self-exec = %lu (%.2f%%), Remote-exec = %lu (%.2f%%), Executor-exec = %lu (%.2f%%),"
+    "Max-exec-time = %lu, Min-exec-time = %lu\n",
     w._id,
     #ifdef TF_USE_XQUEUE
     w._xq->ntasks_pushed_self, p_pushed_self, w._xq->ntasks_pushed_remote, p_pushed_remote,
@@ -1377,8 +1411,40 @@ inline void Executor::_collect_stats() {
     #endif
     w.nexec_from_self, p_exec_from_self,
     w.nexec_from_remote, p_exec_from_remote,
-    w.nexec_from_executor, p_exec_from_executor
+    w.nexec_from_executor, p_exec_from_executor,
+    w.max_exec_time, w.min_exec_time
     );
+
+    csv_file << w._id << ","
+             << w.nexec_from_self << ","
+             << w.nexec_from_remote << ","
+             << w.nexec_from_executor;
+    #ifdef TF_USE_XQUEUE
+    csv_file << ","
+             << w._xq->ntasks_pushed_self << ","
+             << w._xq->ntasks_pushed_remote << ","
+             << w._xq->ntasks_popped_self << ","
+             << w._xq->ntasks_popped_remote << ","
+             << w._xq->ntasks_not_pushed << ","
+             << w._xq->ntasks_not_popped;
+    #ifdef TF_ENABLE_WS
+    csv_file << ","
+             << w._xq->nrequests_attempted << ","
+             << w._xq->nrequests_sent << ","
+             << w._xq->nhandled_attempted << ","
+             << w._xq->nhandled_stolen << ","
+             << w._xq->nhandled_not_stolen;
+    #endif // TF_ENABLE_WS
+    #else
+    csv_file << ","
+             << w._wsq.ntasks_pushed_wsq << ","
+             << w._wsq.ntasks_not_pushed_wsq << ","
+             << w._wsq.ntasks_popped_wsq << ","
+             << w._wsq.ntasks_not_popped_wsq << ","
+             << w._wsq.ntasks_stolen_wsq << ","
+             << w._wsq.ntasks_not_stolen_wsq;
+    #endif
+    csv_file << "\n";
   }
   // // Calculate total statistics
   // #ifdef TF_USE_XQUEUE
@@ -1486,6 +1552,10 @@ inline int Executor::this_worker_id() const {
 #if TF_USE_XQUEUE
 // Custom Procedure: _spawn for XQueue
 inline void Executor::_spawn(size_t N) {
+  #ifdef TF_ENABLE_PROFILE
+  auto ref = _profiler.get_new_ref(EventType::EXECUTOR);
+  _profiler.record(EventType::EXECUTOR, ref, ref);
+  #endif
 
   for(size_t id=0; id<N; ++id) {
     _workers[id]._id = id;
@@ -1494,11 +1564,22 @@ inline void Executor::_spawn(size_t N) {
     // _workers[id]._waiter = &_notifier._waiters[id];
     _workers[id].xq_init(_num_workers, id);
     _workers[id]._xq->_workers = &_workers;
+    #ifdef TF_ENABLE_PROFILE
+    _workers[id]._profiler = new PerThreadTaskProfiler(id);
+    if(!_workers[id]._profiler) {
+      printf("Failed to create profiler for worker %lu\n", id);
+      exit(1);
+    }
+    #endif
   }
 
   for(size_t id=0; id<N; ++id) {
     _workers[id]._thread = std::thread([&, &w=_workers[id]] () {
       pt::this_worker = &w;
+      #ifdef TF_ENABLE_PROFILE
+      auto tref = w._profiler->get_new_ref(EventType::THREAD);
+      w._profiler->record(EventType::THREAD, ref, ref);
+      #endif
 
       // initialize the random engine and seed for work-stealing loop
       w._rdgen.seed(static_cast<std::default_random_engine::result_type>(
@@ -1552,12 +1633,20 @@ inline void Executor::_spawn(size_t N) {
 // Procedure: _spawn
 inline void Executor::_spawn(size_t N) {
 
+
   for(size_t id=0; id<N; ++id) {
     _workers[id]._id = id;
     _workers[id]._vtm = id;
     _workers[id]._executor = this;
     _workers[id]._waiter = &_notifier._waiters[id];
     _workers[id]._thread = std::thread([&, &w=_workers[id]] () {
+      #ifdef TF_ENABLE_PROFILE
+      w._profiler = new PerThreadTaskProfiler(id);
+      if(!w._profiler) {
+        printf("Failed to create profiler for worker %lu\n", id);
+        exit(1);
+      }
+      #endif
 
       pt::this_worker = &w;
 
@@ -1614,10 +1703,26 @@ inline void Executor::_spawn(size_t N) {
 // Custom Procedure: _corun_until for XQueue
 template <typename P>
 inline void Executor::_corun_until(Worker& w, P&& stop_predicate) {
+  #ifdef TF_ENABLE_PROFILE
+  auto rref = w._profiler->get_ref(EventType::RUNTIME);
+  #endif
   while(!stop_predicate()){
+    #ifdef TF_ENABLE_PROFILE
+    auto popref = w._profiler->get_new_ref(EventType::QUEUE_POP);
+    w._profiler->record(EventType::RUNTIME_END | EventType::QUEUE_POP, rref, popref);
+    #endif
     if(auto t = w._xq->pop(); t) {
       // printf("corun_until, before invoke: %p\n", t);
+      #ifdef TF_ENABLE_PROFILE
+      auto invokeref = w._profiler->get_new_ref(EventType::TASK);
+      w._profiler->record(EventType::QUEUE_POP_END | EventType::TASK, popref, invokeref);
+      #endif
+
       _invoke(w, t);
+
+      #ifdef TF_ENABLE_PROFILE 
+      w._profiler->record(EventType::TASK_END | EventType::QUEUE_POP_END, invokeref, popref);
+      #endif
     }
     // else {
     //   std::this_thread::yield();
@@ -1631,22 +1736,30 @@ inline void Executor::_corun_until(Worker& w, P&& stop_predicate) {
 // Function: _corun_until
 template <typename P>
 void Executor::_corun_until(Worker& w, P&& stop_predicate) {
-  // printf("corun_until, by thread %lu\n", w._id);
+  #ifdef TF_ENABLE_PROFILE
+  auto cu_ref = w._profiler->get_new_ref(EventType::CORUN_UNTIL);
+  w._profiler->record(EventType::CORUN_UNTIL, cu_ref, cu_ref);
+  #endif
 
   const size_t MAX_STEALS = ((num_queues() + 1) << 1);
     
   std::uniform_int_distribution<size_t> udist(0, num_queues()-1);
-  
+
   exploit:
 
   while(!stop_predicate()) {
-    
+
     // here we don't do while-loop to drain out the local queue as it can
     // potentially enter a very deep recursive corun, cuasing stack overflow
     if(auto t = w._wsq.pop(); t) {
-      // printf("corun_until, by thread %lu, before invoke: %p\n", w._id, t);
-      // printf("corun_until, before invoke: %p\n", t);
+      #ifdef TF_ENABLE_PROFILE
+      auto invokeref = w._profiler->get_new_ref(EventType::TASK);
+      w._profiler->record(EventType::TASK, cu_ref, invokeref);
+      #endif
       _invoke(w, t);
+      #ifdef TF_ENABLE_PROFILE
+      w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
+      #endif
     }
     else {
       // printf("steal from %lu\n", w._vtm);
@@ -1659,7 +1772,14 @@ void Executor::_corun_until(Worker& w, P&& stop_predicate) {
                                     _buffers.steal(vtm - _workers.size());
 
       if(t) {
+        #ifdef TF_ENABLE_PROFILE
+        auto invokeref = w._profiler->get_new_ref(EventType::TASK);
+        w._profiler->record(EventType::TASK, cu_ref, invokeref);
+        #endif
         _invoke(w, t);
+        #ifdef TF_ENABLE_PROFILE
+        w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
+        #endif
         w._vtm = vtm;
         goto exploit;
       }
@@ -1675,6 +1795,9 @@ void Executor::_corun_until(Worker& w, P&& stop_predicate) {
       }
     }
   }
+  #ifdef TF_ENABLE_PROFILE
+  w._profiler->record(EventType::CORUN_UNTIL_END, cu_ref, cu_ref);
+  #endif
 }
 #endif // TF_USE_XQUEUE: _corun_until
 
@@ -1743,7 +1866,15 @@ inline void Executor::_exploit_task(Worker& w, Node*& t) {
     t = w._xq->pop();
     if (t) {
       TF_DEBUG(w._id, "exploit_task: %p", t);
+      #ifdef TF_ENABLE_PROFILE
+      auto invokeref = w._profiler->get_new_ref(EventType::TASK);
+      auto cu_ref = w._profiler->get_ref(EventType::CORUN_UNTIL);
+      w._profiler->record(EventType::TASK, cu_ref, invokeref);
+      #endif
       _invoke(w, t);
+      #ifdef TF_ENABLE_PROFILE
+      w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
+      #endif
     }
   }while(t);
 }
@@ -1753,7 +1884,15 @@ inline void Executor::_exploit_task(Worker& w, Node*& t) {
 inline void Executor::_exploit_task(Worker& w, Node*& t) {
   while(t) {
     // printf("exploit_task, before invoke: %p\n", t);
+    #ifdef TF_ENABLE_PROFILE
+    auto invokeref = w._profiler->get_new_ref(EventType::TASK);
+    auto cu_ref = w._profiler->get_ref(EventType::CORUN_UNTIL);
+    w._profiler->record(EventType::TASK, cu_ref, invokeref);
+    #endif
     _invoke(w, t);
+    #ifdef TF_ENABLE_PROFILE
+    w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
+    #endif
     t = w._wsq.pop();
   }
 }
@@ -1907,12 +2046,58 @@ inline void Executor::_schedule(Node *node) {
 
 template <typename I>
 inline void Executor::_schedule(Worker& worker, I first, I last) { 
-  TF_THROW("XQueue does not support _schedule(I, I)");
+  
+  size_t num_nodes = last - first;
+
+  if(num_nodes == 0) {
+    return;
+  }
+
+  if(worker._executor == this && pt::this_worker) {
+    for(size_t i=0; i<num_nodes; i++) {
+      auto node = detail::get_node_ptr(first[i]);
+      if(worker._xq->push(node) == TaskQueueCode::TASK_PUSHED) {
+        continue;
+      }
+      _invoke(worker, node);
+    }
+    return;
+  }
+
+  // round-robin push to the xqueue
+  for (size_t i = 0; i < num_nodes; i++) {
+    auto node = detail::get_node_ptr(first[i]);
+    while (_workers[_next_xq_wid]._xq->executor_push(node) !=
+           TaskQueueCode::TASK_PUSHED) {
+      if (++_next_xq_wid < _num_workers) {
+        continue;
+      } else {
+        _next_xq_wid = 0;
+      }
+    }
+  }
 }
 
 template <typename I>
 inline void Executor::_schedule(I first, I last) {
-  TF_THROW("XQueue does not support _schedule(I, I)");
+  
+  size_t num_nodes = last - first;
+
+  if(num_nodes == 0) {
+    return;
+  }
+
+  for(size_t i=0; i<num_nodes; i++) {
+    auto node = detail::get_node_ptr(first[i]);
+    while(_workers[_next_xq_wid]._xq->executor_push(node) != TaskQueueCode::TASK_PUSHED) {
+      if(++_next_xq_wid < _num_workers) {
+        continue;
+      }else{
+        _next_xq_wid = 0;
+      }
+    }
+  }
+
 }
 
 
@@ -2011,6 +2196,9 @@ TF_FORCE_INLINE void Executor::_update_cache(Worker& worker, Node*& cache, Node*
 // Procedure: _invoke
 inline void Executor::_invoke(Worker& worker, Node* node) {
   // printf("invoke: %p\n", node);
+  #ifdef TF_ENABLE_STATS
+  worker.invoke_start();
+  #endif // TF_ENABLE_STATS
 
   #define TF_INVOKE_CONTINUATION()  \
   if (cache) {                      \
@@ -2031,6 +2219,9 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
   if(node->_is_cancelled()) {
     _tear_down_invoke(worker, node, cache);
     TF_INVOKE_CONTINUATION();
+    #ifdef TF_ENABLE_STATS
+    worker.invoke_end();
+    #endif // TF_ENABLE_STATS
     return;
   }
 
@@ -2039,6 +2230,9 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     SmallVector<Node*> waiters;
     if(!node->_acquire_all(waiters)) {
       _schedule(worker, waiters.begin(), waiters.end());
+      #ifdef TF_ENABLE_STATS
+      worker.invoke_end();
+      #endif // TF_ENABLE_STATS
       return;
     }
   }
@@ -2069,6 +2263,9 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // runtime task
     case Node::RUNTIME:{
       if(_invoke_runtime_task(worker, node)) {
+        #ifdef TF_ENABLE_STATS
+        worker.invoke_end();
+        #endif // TF_ENABLE_STATS
         return;
       }
     }
@@ -2077,6 +2274,9 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // subflow task
     case Node::SUBFLOW: {
       if(_invoke_subflow_task(worker, node)) {
+        #ifdef TF_ENABLE_STATS
+        worker.invoke_end();
+        #endif // TF_ENABLE_STATS
         return;
       }
     }
@@ -2097,6 +2297,9 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // module task
     case Node::MODULE: {
       if(_invoke_module_task(worker, node)) {
+        #ifdef TF_ENABLE_STATS
+        worker.invoke_end();
+        #endif // TF_ENABLE_STATS
         return;
       }
     }
@@ -2105,10 +2308,16 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // async task
     case Node::ASYNC: {
       if(_invoke_async_task(worker, node)) {
+        #ifdef TF_ENABLE_STATS
+        worker.invoke_end();
+        #endif // TF_ENABLE_STATS
         return;
       }
       _tear_down_async(worker, node, cache);
       TF_INVOKE_CONTINUATION();
+      #ifdef TF_ENABLE_STATS
+      worker.invoke_end();
+      #endif // TF_ENABLE_STATS
       return;
     }
     break;
@@ -2120,6 +2329,9 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
       }
       _tear_down_dependent_async(worker, node, cache);
       TF_INVOKE_CONTINUATION();
+      #ifdef TF_ENABLE_STATS
+      worker.invoke_end();
+      #endif // TF_ENABLE_STATS
       return;
     }
     break;
@@ -2183,6 +2395,9 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
   // clean up the node after execution
   _tear_down_invoke(worker, node, cache);
   TF_INVOKE_CONTINUATION();
+  #ifdef TF_ENABLE_STATS
+  worker.invoke_end();
+  #endif // TF_ENABLE_STATS
 }
 
 // Procedure: _tear_down_invoke

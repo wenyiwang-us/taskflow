@@ -11,12 +11,15 @@ void matrix_multiplication(
   ) {
 
   std::cout << std::setw(12) << "size"
+            << std::setw(12) << "threads"
             << std::setw(12) << "runtime"
             << std::endl;
 
-  for(int i=128; i<=1024; i += 32) {
+  // for(int i=128; i<=1024; i += 32) {
 
-    N = i;
+    // N = i;
+
+    N = 1024;
 
     allocate_matrix();
 
@@ -26,21 +29,22 @@ void matrix_multiplication(
       if(model == "tf") {
         runtime += measure_time_taskflow(num_threads).count();
       }
-      else if(model == "tbb") {
-        runtime += measure_time_tbb(num_threads).count();
-      }
-      else if(model == "omp") {
-        runtime += measure_time_omp(num_threads).count();
-      }
+      // else if(model == "tbb") {
+      //   runtime += measure_time_tbb(num_threads).count();
+      // }
+      // else if(model == "omp") {
+      //   runtime += measure_time_omp(num_threads).count();
+      // }
       else assert(false);
     }
 
     std::cout << std::setw(12) << N
+              << std::setw(12) << num_threads
               << std::setw(12) << runtime / num_rounds / 1e3
               << std::endl;
 
     deallocate_matrix();
-  }
+  // }
 }
 
 int main(int argc, char* argv[]) {
