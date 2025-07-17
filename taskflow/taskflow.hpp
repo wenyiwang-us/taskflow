@@ -18,13 +18,13 @@
 
 #pragma message "TF_ENABLE_WS is enabled"
 
-#define MAX_NOPS_EMPTY 10000
+#define MAX_NOPS_EMPTY 40
 
 #endif
 
 #endif
 
-#define TF_ENABLE_STATS 1
+// #define TF_ENABLE_STATS 1
 
 #ifdef TF_ENABLE_STATS
 

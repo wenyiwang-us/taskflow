@@ -416,7 +416,7 @@ def main():
         csv_path = os.path.join(csv_folder, "worker_stats.csv")
     else:
         print("No CSV folder provided, using default path")
-        csv_path = "bins/tf_stats/worker_stats.csv"  # Default path
+        csv_path = "tf_stats/worker_stats.csv"  # Default path
     
     try:
         # Set matplotlib style for better appearance
