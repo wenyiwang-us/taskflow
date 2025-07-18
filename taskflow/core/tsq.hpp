@@ -117,6 +117,7 @@ namespace tf {
     // but I suspect it will cause deep recursion.
     TaskQueueCode push(T item);
 
+
     // Called by the executor to push
     TaskQueueCode executor_push(T item);
 
@@ -159,7 +160,16 @@ namespace tf {
     
     private:
 
-    // inline TaskQueueCode _do_load_balance(T item);
+    inline TaskQueueCode _push_local_with_load_balance(T item);
+    inline TaskQueueCode _push_round_robin(T item);
+
+    inline TaskQueueCode _push_stolen(T item, size_t worker_id);
+    inline TaskQueueCode _push_one(T item, size_t qid);
+
+    inline T _dequeue_one(size_t qid);
+    inline T _pop_master();
+
+    inline T _pop_local_with_load_balance();
     inline void _request_steal();
   };
 

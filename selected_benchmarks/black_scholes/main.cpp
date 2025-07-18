@@ -39,7 +39,8 @@ void black_scholes(
             << std::endl;
 
   // for(size_t N = 1000; N<=10000; N+=1000) {
-    size_t N = 10000;
+    // size_t N = 10000;
+    size_t N = 20000;
     generate_options(N);
 
     double runtime {0.0};

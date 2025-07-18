@@ -15,7 +15,8 @@ void bench_primes(
   double runtime {0.0};
 
   // for (size_t p = 10; p <= primes_limit; p*=10) {
-    size_t p = primes_limit;
+    // size_t p = primes_limit;
+    size_t p = primes_limit * 5; // 
 
     for(unsigned j=0; j<num_rounds; ++j) {
       if(model == "tf") {

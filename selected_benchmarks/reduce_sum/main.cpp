@@ -13,7 +13,8 @@ void reduce_sum(
             << std::endl;
 
   // for(size_t N=10; N<=1000000000; N = N*10) {
-    size_t N = 1000000000;
+    // size_t N = 1000000000; // 1e9,
+    size_t N = 2*1e9; // cannot be larger due to memory limit
 
     vec.resize(N);
 

@@ -32,6 +32,8 @@
 
 #endif
 
+#define TF_ENABLE_LOCKLESS 1 // slight modification to the original bounded queue.
+
 // #define TF_ENABLE_PROFILER 1
 
 

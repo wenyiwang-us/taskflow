@@ -19,7 +19,7 @@ void matrix_multiplication(
 
     // N = i;
 
-    N = 1024;
+    N = 2048;
 
     allocate_matrix();
 

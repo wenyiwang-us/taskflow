@@ -372,7 +372,7 @@ BoundedXQueue<T, LogSize>::~BoundedXQueue() {
 #define MSG_REQ2TID(req) ((size_t)((req) >> 40))
 
 template <typename T, size_t LogSize>
-TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
+TaskQueueCode BoundedXQueue<T, LogSize>::_push_local_with_load_balance(T item) {
 
   // First, check the request and do load balance;
   // do_load_balance:
@@ -456,89 +456,114 @@ TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
   }
 
   return ret;
-  // // printf("push task: %p to master queue, tail: %ld, head: %ld\n", item, _dequeues[0].tail, _dequeues[0].head);
-  // if(_dequeues[0].dequeue[_dequeues[0].tail] == nullptr) {
-  //   // Master queue is empty, do not load balance, just enqueue this task
-  //   TF_DEBUG(_worker_id, "push task: %p to master queue, tail: %ld, head: %ld", item, _dequeues[0].tail, _dequeues[0].head);
+}
 
-  //   _dequeues[0].dequeue[_dequeues[0].head] = item;
-  //   _dequeues[0].head = (_dequeues[0].head + 1) & MasterDequeueMask;
-  //   // FIXME: do we need to update _last_q_accessed?
-  //   _last_q_accessed = 0;
-  //   #ifdef TF_ENABLE_STATS
-  //   ntasks_pushed_self++;
-  //   #endif // TF_ENABLE_STATS
-  //   return TaskQueueCode::TASK_PUSHED;
-  // }
+// only used for stealing
+template <typename T, size_t LogSize>
+inline TaskQueueCode BoundedXQueue<T, LogSize>::_push_stolen(T item, size_t worker_id) {
+  assert(worker_id != _worker_id);
+  size_t num_tries {0};
+  size_t target_qid {worker_id < _worker_id ? worker_id - _worker_id + _nworkers : worker_id - _worker_id};
+  Worker& target_worker {(*_workers)[worker_id]};
+  auto& target_dequeue {target_worker._xq->_dequeues[target_qid]};
+  while(target_dequeue.dequeue[target_dequeue.head] != nullptr) {
+    num_tries++;
+    if(num_tries < 25) {
+      continue;
+    }
+    _round++;
+    return TaskQueueCode::TASK_NOT_PUSHED;
+  }
+  if(item == nullptr) {
+    item = _dequeue_one(0);
+  }
+  target_dequeue.dequeue[target_dequeue.head] = item;
+  target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
+  target_worker._xq->_last_q_accessed = target_qid;
+  _round++;
+  return TaskQueueCode::TASK_PUSHED;
+}
 
-  // // Master queue is not empty, load balance first
-  // // Check if there's steal request, load balance the first element in the master queue
-  // if(TF_UNLIKELY(MSG_REQ2ROUND(_steal_request) == _round)) {
+template <typename T, size_t LogSize>
+inline TaskQueueCode BoundedXQueue<T, LogSize>::_push_one(T item, size_t qid) {
+  size_t num_tries {0};
+  size_t target_worker_id = _worker_id + qid;
+  target_worker_id = (target_worker_id > _nworkers - 1) ? target_worker_id - _nworkers : target_worker_id;
+  Worker& target_worker {(*_workers)[target_worker_id]};
+  auto& target_dequeue {target_worker._xq->_dequeues[qid]};
+  while(target_dequeue.dequeue[target_dequeue.head] != nullptr) {
+    num_tries++;
+    if(num_tries < 25) {
+      continue;
+    }
+    return TaskQueueCode::TASK_NOT_PUSHED;
+  }
+  auto mask = qid == 0 ? MasterDequeueMask : DequeueMask;
+  target_dequeue.dequeue[target_dequeue.head] = item;
+  target_dequeue.head = (target_dequeue.head + 1) & mask;
+  target_worker._xq->_last_q_accessed = qid;
+  // printf("Worker %ld: push task: %p to worker %ld, qid: %ld, head: %ld, tail: %ld, mask: %ld\n", _worker_id, item, target_worker_id, qid, target_dequeue.head, target_dequeue.tail, mask);
+  return TaskQueueCode::TASK_PUSHED;
+}
 
-  //   // try push the task to the target worker's aux queue
-  //   size_t num_tries {0};
-  //   bool can_push {true};
-  //   size_t target_worker_id {MSG_REQ2TID(_steal_request)};
-  //   size_t target_qid {target_worker_id < _worker_id ? target_worker_id - _worker_id + _nworkers : target_worker_id - _worker_id};
-  //   Worker& target_worker {(*_workers)[target_worker_id]};
+template <typename T, size_t LogSize>
+inline T BoundedXQueue<T, LogSize>::_dequeue_one(size_t qid) {
 
-  //   while(target_worker._xq->_dequeues[target_qid]
-  //               .dequeue[target_worker._xq->_dequeues[target_qid].head] !=
-  //           nullptr) {
-  //     num_tries++;
-  //     if(num_tries < 25) {
-  //       continue;
-  //     }
-  //     #ifdef TF_ENABLE_STATS
-  //     nhandled_not_stolen++;
-  //     #endif // TF_ENABLE_STATS
+  auto mask = qid == 0 ? MasterDequeueMask : DequeueMask;
+  auto& dequeue = _dequeues[qid];
+  if(dequeue.dequeue[dequeue.tail] == nullptr) {
+    return nullptr;
+  }
+  T item {dequeue.dequeue[dequeue.tail]};
+  dequeue.dequeue[dequeue.tail] = nullptr;
+  dequeue.tail = (dequeue.tail + 1) & mask;
+  // printf("Worker %ld: dequeue task: %p from qid: %ld, head: %ld, tail: %ld, tail_val: %p\n", _worker_id, item, qid, dequeue.head, dequeue.tail, dequeue.dequeue[dequeue.tail]);
+  return item;
+}
 
-  //     can_push = false;
-  //     _round++; // able to accept new request
-  //     break;
-  //   }
+template <typename T, size_t LogSize>
+inline T BoundedXQueue<T, LogSize>::_pop_master() {
+  auto& dequeue = _dequeues[0];
+  if(dequeue.dequeue[dequeue.tail] == nullptr) {
+    return nullptr;
+  }
+  auto head_1 = (dequeue.head - 1) & MasterDequeueMask; 
+  T item {dequeue.dequeue[head_1]};
+  dequeue.dequeue[head_1] = nullptr;
+  dequeue.head = head_1;
+  return item;
+}
 
-  //   if(can_push) {
-  //     // transfer the first task in the master queue to the target worker's aux queue
-  //     // pop
-  //     T task {_dequeues[0].dequeue[_dequeues[0].tail]};
-  //     _dequeues[0].dequeue[_dequeues[0].tail] = nullptr;
-  //     _dequeues[0].tail = (_dequeues[0].tail + 1) & MasterDequeueMask;
-  //     // push
-  //     auto& target_dequeue = target_worker._xq->_dequeues[target_qid];
-  //     target_dequeue.dequeue[target_dequeue.head] = task;
-  //     target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
-  //     target_worker._xq->_last_q_accessed = target_qid;
-  //     // ready to accept new request
-  //     _round++;
-  //     #ifdef TF_ENABLE_STATS
-  //     nhandled_stolen++;
-  //     #endif // TF_ENABLE_STATS
-  //     TF_DEBUG(_worker_id, "move task: %p to worker %ld, qid: %ld", task, target_worker_id, target_qid);
-  //     ret = TaskQueueCode::TASK_PUSHED;
-  //   }
-  // }
 
-  // // try to push item to the master queue
-  // if(_dequeues[0].dequeue[_dequeues[0].head] == nullptr) {
-  //   _dequeues[0].dequeue[_dequeues[0].head] = item;
-  //   _dequeues[0].head = (_dequeues[0].head + 1) & MasterDequeueMask;
-  //   _last_q_accessed = 0;
-  //   #ifdef TF_ENABLE_STATS
-  //   ntasks_pushed_self++;
-  //   #endif // TF_ENABLE_STATS
-  //   TF_DEBUG(_worker_id, "push task: %p to master queue", item);
-  //   ret = TaskQueueCode::TASK_PUSHED;
-  // }
+template <typename T, size_t LogSize>
+TaskQueueCode BoundedXQueue<T, LogSize>::_push_round_robin(T item) {
 
-  // // ret == TASK_NOT_PUSHED, only when my queue is full and the steal request is not accepted
-  // // TF_DEBUG(_worker_id, "push task: %p failed", item);
-  // #ifdef TF_ENABLE_STATS
-  // if(ret == TaskQueueCode::TASK_NOT_PUSHED) {
-  //   ntasks_not_pushed++;
-  // }
-  // #endif // TF_ENABLE_STATS
-  // return ret;
+  TaskQueueCode ret {TaskQueueCode::TASK_NOT_PUSHED};
+  // Do load balance first.
+  if(MSG_REQ2ROUND(_steal_request) == _round) {
+    size_t target_worker_id {MSG_REQ2TID(_steal_request)};
+    if(_dequeues[0].dequeue[_dequeues[0].tail] == nullptr) {
+      // MasterQueue empty, try to redirect item to the thief
+      if(_push_stolen(item, target_worker_id) == TaskQueueCode::TASK_PUSHED) {
+        return TaskQueueCode::TASK_PUSHED;
+      }
+    } else {
+      // MasterQueue not empty, try to transfer the oldest task to the thief's aux queue
+      // The return value does not matter.
+      _push_stolen(nullptr, target_worker_id);
+    }
+  }
+
+  // Try to push to the current _last_q
+  ret = _push_one(item, _last_q);
+  
+  // next queue to push
+  if(_last_q + 1 < _nworkers) {
+    _last_q++;
+  } else {
+    _last_q = 0;
+  }
+  return ret;
 }
 
 template <typename T, size_t LogSize>
@@ -558,47 +583,6 @@ TaskQueueCode BoundedXQueue<T, LogSize>::executor_push(T item) {
   return TaskQueueCode::TASK_PUSHED;
 }
 
-// template <typename T, size_t LogSize>
-// TaskQueueCode BoundedXQueue<T, LogSize>::_do_load_balance(T item) {
-//   // Check the steal request
-//   #ifdef TF_ENABLE_WS
-//   nhandled_attempted++;
-//   #endif // TF_ENABLE_WS
-//   if(TF_UNLIKELY(MSG_REQ2ROUND(_steal_request) == _round)) {
-
-//     // try push the task to the target worker's aux queue
-//     size_t num_tries = 0;
-//     size_t target_worker_id = MSG_REQ2TID(_steal_request);
-//     size_t target_qid = target_worker_id < _worker_id ? target_worker_id - _worker_id + _nworkers : target_worker_id - _worker_id;
-//     Worker& target_worker = (*_workers)[target_worker_id];
-//     while(target_worker._xq->_dequeues[target_qid]
-//                 .dequeue[target_worker._xq->_dequeues[target_qid].head] !=
-//             nullptr) {
-//       num_tries++;
-//       if(num_tries < 25) {
-//         continue;
-//       }
-//       #ifdef TF_ENABLE_WS
-//       nhandled_not_stolen++;
-//       #endif // TF_ENABLE_WS
-//       _round++;
-//       return TaskQueueCode::TASK_NOT_PUSHED;
-//     }
-//     // push to aux queue
-//     auto& target_dequeue = target_worker._xq->_dequeues[target_qid];
-//     target_dequeue.dequeue[target_dequeue.head] = item;
-//     target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
-//     target_worker._xq->_last_q_accessed = target_qid;
-//     // ready to accept new request
-//     _round++;
-//     #ifdef TF_ENABLE_WS
-//     nhandled_stolen++;
-//     #endif // TF_ENABLE_WS
-//     return TaskQueueCode::TASK_PUSHED;
-//   }else{
-//     return TaskQueueCode::NO_REQUEST;
-//   }
-// }
 
 template <typename T, size_t LogSize>
 inline void BoundedXQueue<T, LogSize>::_request_steal() {
@@ -636,8 +620,9 @@ inline void BoundedXQueue<T, LogSize>::_request_steal() {
 
 }
 
+// Pop functions
 template <typename T, size_t LogSize>
-T BoundedXQueue<T, LogSize>::pop() {
+inline T BoundedXQueue<T, LogSize>::_pop_local_with_load_balance() {
 
   // Do load balance, with local queue
   if (TF_UNLIKELY(MSG_REQ2ROUND(_steal_request) == _round)) {
@@ -679,6 +664,7 @@ T BoundedXQueue<T, LogSize>::pop() {
         target_dequeue.dequeue[target_dequeue.head] = task;
         target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
         target_worker._xq->_last_q_accessed = target_qid;
+        // printf("Worker %ld: stolen task: %p, from qid: %ld, head: %ld, tail: %ld, to qid: %ld, head: %ld, tail: %ld\n", _worker_id, task, 0, _dequeues[0].head, _dequeues[0].tail, target_qid, target_dequeue.head, target_dequeue.tail);
         // ready to accept new request
         _round++;
 #ifdef TF_ENABLE_STATS
@@ -712,6 +698,7 @@ T BoundedXQueue<T, LogSize>::pop() {
     ntasks_popped_self++;
     #endif // TF_ENABLE_STATS
     _nops_empty = 0;
+    // printf("Worker %ld: pop task: %p, qid: %ld, head: %ld, tail: %ld\n", _worker_id, item, 0, _dequeues[0].head, _dequeues[0].tail);
     return item;
   }
 
@@ -731,6 +718,7 @@ T BoundedXQueue<T, LogSize>::pop() {
       TF_DEBUG(_worker_id, "pop task: %p", item);
       // reset counter
       _nops_empty = 0;
+      // printf("Worker %ld: pop task: %p, qid: %ld, head: %ld, tail: %ld\n", _worker_id, item, _last_q_accessed, target_dequeue.head, target_dequeue.tail);
       return item;
     }
   }
@@ -748,58 +736,29 @@ T BoundedXQueue<T, LogSize>::pop() {
       #endif // TF_ENABLE_STATS
       // reset counter
       _nops_empty = 0;
+      // printf("Worker %ld: pop task: %p, qid: %ld, head: %ld, tail: %ld\n", _worker_id, item, qid, target_dequeue.head, target_dequeue.tail);
       return item;
     }
   }
 
-  // Then try pop from the last queue
-  // for (size_t qid = _nworkers - 1; qid > 0; qid--) {
-  //   auto& target_dequeue = _dequeues[qid];
-  //   if (target_dequeue.dequeue[target_dequeue.tail] != nullptr) {
-  //     item = target_dequeue.dequeue[target_dequeue.tail];
-  //     target_dequeue.dequeue[target_dequeue.tail] = nullptr;
-  //     target_dequeue.tail = (target_dequeue.tail + 1) & DequeueMask;
-  //     last_qid = qid;
-  //     TF_DEBUG(_worker_id, "pop task: %p", item);
-  //     #ifdef TF_ENABLE_STATS
-  //     if(last_qid == 0){
-  //       ntasks_popped_self++;
-  //     }else{
-  //       ntasks_popped_remote++;
-  //     }
-  //     #endif // TF_ENABLE_STATS
-  //     return item;
-  //   }
-  // }
-  // // Then try to pop from the rest of the queues
-  // for (size_t qid = _nworkers - 1; qid > last_qid; qid--) {
-  //   auto& target_dequeue = _dequeues[qid];
-  //   if (target_dequeue.dequeue[target_dequeue.tail] != nullptr) {
-  //     item = target_dequeue.dequeue[target_dequeue.tail];
-  //     target_dequeue.dequeue[target_dequeue.tail] = nullptr;
-  //     target_dequeue.tail = (target_dequeue.tail + 1) & DequeueMask;
-  //     last_qid = qid;
-  //     TF_DEBUG(_worker_id, "pop task: %p", item);
-  //     #ifdef TF_ENABLE_STATS
-  //     if(last_qid == 0){
-  //       ntasks_popped_self++;
-  //     }else{
-  //       ntasks_popped_remote++;
-  //     }
-  //     #endif // TF_ENABLE_STATS
-  //     return item;
-  //   }
-  // }
-  // if(item != nullptr) {
-  //   TF_DEBUG(_worker_id, "pop task: %p", item);
-  // }
   _request_steal();
   #ifdef TF_ENABLE_STATS
   ntasks_not_popped++;
   #endif // TF_ENABLE_STATS
   return item; // which is a nullptr
 }
-// #endif // TF_IMPL_XQUEUE
+
+template <typename T, size_t LogSize>
+T BoundedXQueue<T, LogSize>::pop() {
+  return _pop_local_with_load_balance();
+}
+
+template <typename T, size_t LogSize>
+TaskQueueCode BoundedXQueue<T, LogSize>::push(T item) {
+  return _push_round_robin(item);
+  // return _push_local_with_load_balance(item);
+}
+
 
 #endif // TF_USE_XQUEUE
 

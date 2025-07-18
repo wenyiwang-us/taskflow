@@ -26,7 +26,9 @@ void mandelbrot(
 
   // for(int N = 100; N<=1000; N+=100) {  
 
-    int N = 1000;
+    // int N = 3000; // 30-10s 2-16 threads
+
+    int N = 2500; // 22-4s 2-16 threads
 
     W = N;
     H = N;

@@ -2195,7 +2195,7 @@ TF_FORCE_INLINE void Executor::_update_cache(Worker& worker, Node*& cache, Node*
   
 // Procedure: _invoke
 inline void Executor::_invoke(Worker& worker, Node* node) {
-  // printf("invoke: %p\n", node);
+  // printf("Worker %ld: invoke: %p\n", worker._id, node);
   #ifdef TF_ENABLE_STATS
   worker.invoke_start();
   #endif // TF_ENABLE_STATS

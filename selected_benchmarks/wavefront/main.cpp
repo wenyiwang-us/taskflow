@@ -21,7 +21,9 @@ void wavefront(
 
   // for(int S=32; S<=4096; S += 128) {
 
-    int S = 4096;
+    // int S = 4096;
+    // int S = 16384; // ~2000 ms
+    int S = 32768; // ~8000 ms
 
     M = N = S;
     B = 8;
