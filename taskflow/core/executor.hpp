@@ -38,7 +38,7 @@ tf::Task C = taskflow.emplace([] () { std::cout << "This is TaskC\n"; });
 A.precede(B, C);
 
 tf::Future<void> fu = executor.run(taskflow);
-fu.wait();                // block until the execution completes
+fu.wait();  // block until the execution completes
 
 executor.run(taskflow, [](){ std::cout << "end of 1 run"; }).wait();
 executor.run_n(taskflow, 4);
@@ -50,6 +50,15 @@ executor.run_until(taskflow, [cnt=0] () mutable { return ++cnt == 10; });
 All executor methods are @em thread-safe. 
 For example, you can submit multiple taskflows to an executor concurrently 
 from different threads, while other threads simultaneously create asynchronous tasks.
+
+@code{.cpp}
+std::thread t1([&](){ executor.run(taskflow); };
+std::thread t2([&](){ executor.async([](){ std::cout << "async task from t2\n"; }); });
+executor.async([&](){ std::cout << "async task from the main thread\n"; });
+@endcode
+
+@note
+To know more about tf::Executor, please refer to @ref ExecuteTaskflow.
 */
 class Executor {
 
@@ -1096,7 +1105,7 @@ class Executor {
   void _invoke_static_task(Worker&, Node*);
   void _invoke_condition_task(Worker&, Node*, SmallVector<int>&);
   void _invoke_multi_condition_task(Worker&, Node*, SmallVector<int>&);
-  void _process_async_dependent(Node*, tf::AsyncTask&, size_t&);
+  void _process_dependent_async(Node*, tf::AsyncTask&, size_t&);
   void _process_exception(Worker&, Node*);
   void _schedule_async_task(Node*);
   void _update_cache(Worker&, Node*&, Node*);
