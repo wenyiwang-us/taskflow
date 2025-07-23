@@ -166,11 +166,15 @@ namespace tf {
     inline TaskQueueCode _push_stolen(T item, size_t worker_id);
     inline TaskQueueCode _push_one(T item, size_t qid);
 
+    // helper functions
     inline T _dequeue_one(size_t qid);
     inline T _pop_master();
 
+    // pop functions
     inline T _pop_local_with_load_balance();
+    inline T _pop_round_robin();
     inline void _request_steal();
+    inline void _handle_request();
   };
 
 #endif // TF_USE_XQUEUE
@@ -705,7 +709,7 @@ T BoundedTaskQueue<T, LogSize>::pop() {
     _bottom.store(b + 1, std::memory_order_relaxed);
   }
   #ifdef TF_ENABLE_STATS
-  if(item) {
+  if(item != nullptr) {
     ++ntasks_popped_wsq;
   }
   else {
@@ -734,7 +738,7 @@ T BoundedTaskQueue<T, LogSize>::steal() {
   }
   #ifdef TF_ENABLE_STATS
   if(item) {
-    ++ntasks_stolen_wsq;
+    ++ntasks_stolen_wsq; // data race can happen here, only use it for stats
   }
   else {
     ++ntasks_not_stolen_wsq;
