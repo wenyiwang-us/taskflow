@@ -647,6 +647,7 @@ inline void BoundedXQueue<T, LogSize>::_handle_request() {
       #ifdef TF_ENABLE_STATS
       nhandled_not_stolen++;
       #endif // TF_ENABLE_STATS
+      _round++;
       return;
     }
     // thief's queue can accept new task
@@ -679,11 +680,10 @@ inline void BoundedXQueue<T, LogSize>::_handle_request() {
       }
     }
 
-    // no item found, invalid request
-    _round++;
     #ifdef TF_ENABLE_STATS
     nhandled_not_stolen++;
     #endif // TF_ENABLE_STATS
+    _round++;
     return;
 
 
@@ -691,10 +691,10 @@ inline void BoundedXQueue<T, LogSize>::_handle_request() {
     target_dequeue.dequeue[target_dequeue.head] = item;
     target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
     target_worker._xq->_last_q_accessed = target_qid;
-    _round++;
     #ifdef TF_ENABLE_STATS
     nhandled_stolen++;
     #endif // TF_ENABLE_STATS
+    _round++;
     return;
   }
 }
