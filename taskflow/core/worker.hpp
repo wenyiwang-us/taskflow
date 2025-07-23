@@ -310,21 +310,6 @@ namespace pt {
 @private
 */
   inline thread_local Worker* this_worker {nullptr};
-
-// #ifdef TF_ENABLE_STATS
-  // inline thread_local uint64_t ntasks_pushed_self {0};
-  // inline thread_local uint64_t ntasks_pushed_remote {0};
-  // inline thread_local uint64_t ntasks_not_pushed {0}; // full queue
-
-
-  // inline thread_local uint64_t ntasks_popped_self {0};
-  // inline thread_local uint64_t ntasks_popped_remote {0};
-  // inline thread_local uint64_t ntasks_not_popped {0}; // empty queue
-
-  // inline thread_local uint64_t ntasks_created {0};
-  // inline thread_local uint64_t ntasks_executed_self {0};
-  // inline thread_local uint64_t ntasks_executed_remote {0};
-// #endif // TF_ENABLE_STATS
 }
 
 #if TF_USE_XQUEUE
@@ -434,9 +419,9 @@ TaskQueueCode BoundedXQueue<T, LogSize>::_push_local_with_load_balance(T item) {
         target_worker._xq->_last_q_accessed = target_qid;
         // ready to accept new request
         _round++;
-#ifdef TF_ENABLE_STATS
+        #ifdef TF_ENABLE_STATS
         nhandled_stolen++;
-#endif // TF_ENABLE_STATS
+        #endif // TF_ENABLE_STATS
         // We only do load balance here, but the item is not handled yet 
       }
     }
@@ -612,7 +597,7 @@ TaskQueueCode BoundedXQueue<T, LogSize>::executor_push(T item) {
 
 template <typename T, size_t LogSize>
 inline void BoundedXQueue<T, LogSize>::_request_steal() {
-  // We have nothing to steal, invalidate stale request
+  // We have nothing to steal, invalidate my stale request
   _round++;
   // Pick a random worker to steal from
   #ifdef TF_ENABLE_STATS
@@ -694,7 +679,7 @@ inline void BoundedXQueue<T, LogSize>::_handle_request() {
       }
     }
 
-    // no item found, invalidate request
+    // no item found, invalid request
     _round++;
     #ifdef TF_ENABLE_STATS
     nhandled_not_stolen++;
@@ -706,6 +691,7 @@ inline void BoundedXQueue<T, LogSize>::_handle_request() {
     target_dequeue.dequeue[target_dequeue.head] = item;
     target_dequeue.head = (target_dequeue.head + 1) & DequeueMask;
     target_worker._xq->_last_q_accessed = target_qid;
+    _round++;
     #ifdef TF_ENABLE_STATS
     nhandled_stolen++;
     #endif // TF_ENABLE_STATS
