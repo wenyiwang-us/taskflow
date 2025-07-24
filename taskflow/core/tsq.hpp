@@ -86,21 +86,26 @@ namespace tf {
     // WW: This now is allocated on the heap while TF's bounded task queue is
     // allocated on the stack WW: Need to justify if this is a good idea
     XDequeue *_dequeues {nullptr};
-    size_t _nworkers {-1}; // Store the outer dimension size
-    size_t _worker_id {-1}; // Current worker id
+    size_t _nworkers {-1}; // number of workers
+    size_t _worker_id {-1}; // my worker id
     size_t _last_q {0};    // Points to the last queue that was used to push a task
     uint64_t _nops_empty {0}; // number of empty queue pop, used to periodically send request
     size_t _last_q_popped {0}; // points to the last queue that was popped from
+    bool _has_tasks {false}; // whether the queue has tasks, caution: this may experience false sharing
+
+    size_t _nsteals_shift; // number of shifts to calculate the number of steals
+    size_t _nvtm; // number of victim threads
 
     // Shared by all other workers
     alignas(2 * TF_CACHELINE_SIZE) size_t _last_q_accessed {0}; // points to the last queue that was accessed
     alignas(2 * TF_CACHELINE_SIZE) uint64_t _steal_request {0}; // steal request from other workers (thief)
     alignas(2 * TF_CACHELINE_SIZE) uint64_t _round {1}; // round number of reading the steal request
+    
 
   public:
 
     // Constructor
-    BoundedXQueue(const size_t nworkers, const size_t worker_id);
+    BoundedXQueue(const size_t nworkers, const size_t worker_id, const size_t nsteals_shift, const size_t nvtm);
     ~BoundedXQueue();
 
     /**
@@ -165,6 +170,7 @@ namespace tf {
 
     inline TaskQueueCode _push_stolen(T item, size_t worker_id);
     inline TaskQueueCode _push_one(T item, size_t qid);
+    inline TaskQueueCode _push_local_with_steal_many(T item);
 
     // helper functions
     inline T _dequeue_one(size_t qid);
@@ -173,8 +179,12 @@ namespace tf {
     // pop functions
     inline T _pop_local_with_load_balance();
     inline T _pop_round_robin();
+    inline T _pop_local_with_steal_many();
+
     inline void _request_steal();
+    inline void _request_steals();
     inline void _handle_request();
+    inline void _handle_requests();
   };
 
 #endif // TF_USE_XQUEUE

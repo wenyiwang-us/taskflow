@@ -1167,8 +1167,6 @@ inline Executor::Executor(size_t N, std::shared_ptr<WorkerInterface> wix):
   if(N == 0) {
     TF_THROW("executor must define at least one worker");
   }
-  // print to stderr
-  fprintf(stderr, "Executor intializing with %zu workers\n", N);
   // If spawning N threads fails, shut down any created threads before 
   // rethrowing the exception.
 #ifndef TF_DISABLE_EXCEPTION_HANDLING
@@ -1557,12 +1555,24 @@ inline void Executor::_spawn(size_t N) {
   _profiler.record(EventType::EXECUTOR, ref, ref);
   #endif
 
+  // get envs
+  size_t nsteals_shift {0};
+  size_t nvtm {1};
+  if(getenv("TF_NSTEALS_SHIFT")) {
+    nsteals_shift = std::stoul(getenv("TF_NSTEALS_SHIFT"));
+  }
+  if(getenv("TF_NVTM")) {
+    nvtm = std::stoul(getenv("TF_NVTM"));
+  }
+  // print to stderr
+  fprintf(stderr, "Executor intializing with %zu workers, nsteals_shift: %zu, nvtm: %zu\n", N, nsteals_shift, nvtm);
+
   for(size_t id=0; id<N; ++id) {
     _workers[id]._id = id;
     _workers[id]._vtm = id;
     _workers[id]._executor = this;
     // _workers[id]._waiter = &_notifier._waiters[id];
-    _workers[id].xq_init(_num_workers, id);
+    _workers[id].xq_init(_num_workers, id, nsteals_shift, nvtm);
     _workers[id]._xq->_workers = &_workers;
     #ifdef TF_ENABLE_PROFILE
     _workers[id]._profiler = new PerThreadTaskProfiler(id);
