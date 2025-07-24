@@ -15,7 +15,7 @@ void reduce_sum(
   // for(size_t N=10; N<=100000000; N = N*10) {
 
     // size_t N = 100000000;
-    size_t N = 1e9; // cannot be larger due to memory limit
+    size_t N = 8*1e9; // cannot be larger due to memory limit
 
     input.resize(N);
     output.resize(N);

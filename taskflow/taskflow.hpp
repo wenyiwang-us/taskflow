@@ -24,7 +24,7 @@
 
 #endif
 
-#define TF_ENABLE_STATS 1
+// #define TF_ENABLE_STATS 1
 
 #ifdef TF_ENABLE_STATS
 
