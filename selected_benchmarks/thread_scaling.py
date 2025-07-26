@@ -7,6 +7,8 @@ import argparse
 import matplotlib.pyplot as plot
 import statistics as stat
 import numpy as np
+import csv
+import pandas as pd
 ###########################################################
 # main function
 ###########################################################
@@ -70,8 +72,8 @@ def main():
 
   parser.add_argument(
     '-p', '--plot',
-    type=bool,
-    help='show the plot or not',
+    action='store_true',
+    help='create plot from CSV data (requires plot.py)',
     default=False
   )
 
@@ -80,6 +82,27 @@ def main():
     type=str,
     help='file name to save the plot result',
     default="result.png"
+  )
+
+  parser.add_argument(
+    '-c', '--csv',
+    type=str,
+    help='CSV folder path (CSV files will be saved as path/name.csv)',
+    required=True
+  )
+
+  parser.add_argument(
+    '-n', '--name',
+    type=str,
+    help='Name of this run (used for CSV filename and name column)',
+    required=True
+  )
+
+  parser.add_argument(
+    '-a', '--append',
+    type=bool,
+    help='append to existing CSV file or create new one',
+    default=False
   )
   
   # parse the arguments
@@ -90,59 +113,107 @@ def main():
   print('methods:', args.methods)
   print('num_rounds:', args.num_rounds)
   print('plot:', args.plot)
+  print('csv folder:', args.csv)
+  print('run name:', args.name)
+  print('append:', args.append)
 
-  # Create the plot
-  # Create subplot for each benchmark
-  num_benchmarks = len(args.benchmarks)
-  rows = math.ceil(num_benchmarks)  # 2 columns
-  cols = 1
-  fig, axes = plot.subplots(rows, cols, figsize=(12, 5*rows))
-  # Ensure axes is always a list of axis objects
-  if num_benchmarks == 1:
-    axes = np.array([axes])
-  axes = axes.flatten()
-
-  # Plot each benchmark
-  for idx, benchmark in enumerate(args.benchmarks):
-    ax = axes[idx]
-    ax.set_title(benchmark)
-    ax.set_xlabel('Number of Threads')
-    ax.set_ylabel('Runtime (ms)')
-    
-    for method in args.methods:
-      X, Y = run(benchmark, method, args.threads, args.num_rounds)
-      print(method, X, Y)
-      if method == 'tf':
-        marker = ''
-        color = 'b'
-      elif method == 'xtf':
-        marker = 'x'
-        color = 'r'
-      elif method == 'omp':
-        marker = '+'
-        color = 'g'
-      else:  # tbb
-        marker = '.'
-        color = 'orange'
-    
-      ax.plot(X, Y, label=method, marker=marker, color=color)
-      ax.legend()
-
-  # Remove empty subplots
-  for idx in range(num_benchmarks, len(axes)):
-    fig.delaxes(axes[idx])
-
-  plot.tight_layout()
-  plot.savefig(args.output)
-
-  if args.plot:
-    plot.show()
-
-  plot.close(fig)
+  # Run benchmarks and collect data
+  all_results = run_all_benchmarks(args.benchmarks, args.methods, args.threads, args.num_rounds, args.name)
   
+  # Save results to CSV
+  save_to_csv(all_results, args.csv, args.name, args.append)
+  
+  # Create plot if requested
+  if args.plot:
+    print("Plotting functionality has been moved to plot.py")
+
+def run_all_benchmarks(benchmarks, methods, threads, num_rounds, run_name):
+    """Run all benchmarks and collect results"""
+    all_results = []
+    
+    for benchmark in benchmarks:
+        for method in methods:
+            for thread in threads:
+                results = run_benchmark(benchmark, method, thread, num_rounds, run_name)
+                all_results.extend(results)
+    
+    return all_results
+
+def run_benchmark(benchmark, method, thread, num_rounds, run_name):
+    """Run a single benchmark and return results"""
+    if method == 'xtf':
+        exe = f'../build/selected_benchmarks/xtf_{benchmark}'
+        method_name = 'tf'
+    else:
+        exe = f'../build/selected_benchmarks/bench_{benchmark}'
+        method_name = method
+
+    results = []
+    print(f'{exe} -m {method_name} -t {thread} -r {num_rounds}')
+    
+    # Run the benchmark executable
+    cmd = [exe, '-m', method_name, '-t', str(thread), '-r', str(num_rounds)]
+    
+    with open('tmp.txt', 'w') as f:
+        subprocess.call(cmd, stdout=f)
+   
+    with open('tmp.txt', 'r') as f:
+        # first two lines are header
+        f.readline()
+        f.readline()
+        for line in f:
+            token = line.split()
+            assert len(token) == 3, "thread_scaling: output line must have exactly three numbers"
+            size = int(token[0])
+            nthreads = int(token[1])
+            exec_time_ms = float(token[2])
+            
+            # Add result for each round
+            for round_num in range(1, num_rounds + 1):
+                results.append({
+                    'name': run_name,
+                    'benchmark': benchmark,
+                    'method': method,
+                    'nthreads': nthreads,
+                    'round': round_num,
+                    'size': size,
+                    'exec_time_ms': exec_time_ms
+                })
+    
+    return results
+
+def save_to_csv(results, csv_folder, run_name, append=False):
+    """Save results to CSV file"""
+    # Ensure the folder exists
+    os.makedirs(csv_folder, exist_ok=True)
+    
+    csv_filename = os.path.join(csv_folder, f"{run_name}.csv")
+    
+    # Define CSV headers
+    headers = ['name', 'benchmark', 'method', 'nthreads', 'round', 'size', 'exec_time_ms']
+    
+    # Check if file exists and append mode
+    file_exists = os.path.exists(csv_filename)
+    mode = 'a' if append and file_exists else 'w'
+    
+    with open(csv_filename, mode, newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=headers)
+        
+        # Write header only if creating new file or not appending
+        if mode == 'w' or not append:
+            writer.writeheader()
+        
+        # Write results
+        for result in results:
+            writer.writerow(result)
+    
+    print(f"Results saved to {csv_filename}")
+
+
+
+# Legacy function for backward compatibility
 def run(benchmark, method, threads, num_rounds):
-
-
+    """Legacy function - kept for backward compatibility"""
     if method == 'xtf':
         exe = f'../build/selected_benchmarks/xtf_{benchmark}'
         method = 'tf'
@@ -171,8 +242,6 @@ def run(benchmark, method, threads, num_rounds):
                 Y.append(float(token[2]))
         
     return X, Y
-
-
 
 if __name__ == "__main__":
   main()

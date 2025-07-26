@@ -30,7 +30,8 @@ int* BUFFER2 = nullptr;
 void black_scholes(
   const std::string& model,
   const unsigned num_threads,
-  const unsigned num_rounds
+  const unsigned num_rounds,
+  const size_t num_options
 ) {
 
   std::cout << std::setw(12) << "size"
@@ -40,7 +41,7 @@ void black_scholes(
 
   // for(size_t N = 1000; N<=10000; N+=1000) {
     // size_t N = 10000;
-    size_t N = 20000;
+    size_t N = num_options;
     generate_options(N);
 
     double runtime {0.0};
@@ -78,6 +79,9 @@ int main (int argc, char *argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  size_t num_options {20000};
+  app.add_option("-i,--input", num_options, "number of options (default=20000)");
+
   bool cmp_seq {false};
   app.add_option("-s,--seq", cmp_seq, "compare with sequential (default=false)");
 
@@ -95,9 +99,10 @@ int main (int argc, char *argv[]) {
   std::cout << "model=" << model << ' '
             << "num_threads=" << num_threads << ' '
             << "num_rounds=" << num_rounds << ' '
+            << "num_options=" << num_options << ' '
             << std::endl;
 
-  black_scholes(model, num_threads, num_rounds);
+  black_scholes(model, num_threads, num_rounds, num_options);
 
   // Compare with sequential version to check correctness
   //if(cmp_seq) {

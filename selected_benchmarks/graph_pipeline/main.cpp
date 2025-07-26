@@ -20,13 +20,19 @@ int main(int argc, char* argv[]) {
         return "";
      });
 
-  unsigned num_lines {8};
-  app.add_option("-l,--num_lines", num_lines, "num of lines (default=8)");
-
-  size_t pipes = {8};
-  app.add_option("-p,--pipes", pipes, "the number of pipes (default=8)");
+  std::string input = "8:8";
+  app.add_option("-i,--input", input, "input format: num_lines:pipes (default=8:8)");
 
   CLI11_PARSE(app, argc, argv);
+
+  // Parse input string to extract num_lines and pipes
+  size_t colon_pos = input.find(':');
+  if (colon_pos == std::string::npos) {
+    throw std::runtime_error("input format should be num_lines:pipes (e.g., 8:8)");
+  }
+  
+  unsigned num_lines = std::stoul(input.substr(0, colon_pos));
+  size_t pipes = std::stoul(input.substr(colon_pos + 1));
 
   if(pipes == 0 || pipes > 16) {
     throw std::runtime_error("can only support 1-16 pipes");

@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
   app.add_option("-t,--num_threads", num_threads, "number of threads (default=1)");
   
   size_t num_queens {13};
-  app.add_option("-q,--queens", num_queens, "max number of queens (default=14)");
+  app.add_option("-i,--input", num_queens, "max number of queens (default=13)");
 
   size_t num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");

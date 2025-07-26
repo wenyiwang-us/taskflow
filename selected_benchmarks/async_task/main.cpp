@@ -4,14 +4,15 @@
 void bench_async_task(
   const std::string& model,
   const unsigned num_threads,
-  const unsigned num_rounds
+  const unsigned num_rounds,
+  const int task_size
   ) {
 
   std::cout << std::setw(12) << "size"
             << std::setw(12) << "threads"
             << std::setw(12) << "runtime"
             << std::endl;
-  int S = 2097152;
+  int S = task_size;
   // for(int S=1; S<=2097152; S<<=1) {
 
     double runtime {0.0};
@@ -49,6 +50,9 @@ int main(int argc, char* argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  int task_size {2097152};
+  app.add_option("-i,--input", task_size, "task size (default=2097152)");
+
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name std|omp|tf|tbb (default=tf)")
      ->check([] (const std::string& m) {
@@ -63,9 +67,10 @@ int main(int argc, char* argv[]) {
   std::cout << "model=" << model << ' '
             << "num_threads=" << num_threads << ' '
             << "num_rounds=" << num_rounds << ' '
+            << "task_size=" << task_size << ' '
             << std::endl;
 
-  bench_async_task(model, num_threads, num_rounds);
+  bench_async_task(model, num_threads, num_rounds, task_size);
 
   return 0;
 }

@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
   app.add_option("-t,--num_threads", num_threads, "number of threads (default=1)");
   
   unsigned num_fibonacci {35};
-  app.add_option("-f,--fibonacci", num_fibonacci, "max number of fibonacci (default=35)");
+  app.add_option("-i,--input", num_fibonacci, "max number of fibonacci (default=35)");
 
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");

@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
   size_t MaxDepth {4};
-  app.add_option("-d,--max_depth", MaxDepth, "max depth (default=1)");
+  app.add_option("-i,--input", MaxDepth, "max depth (default=4)");
 
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tf|tbb|omp (default=tf)")

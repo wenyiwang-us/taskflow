@@ -20,25 +20,32 @@ int main(int argc, char* argv[]) {
         return "";
      });
 
-  unsigned num_lines {8};
-  app.add_option("-l,--num_lines", num_lines, "num of lines (default=8)");
-
-  std::string pipes = "ssssssss";
-  app.add_option("-p,--pipes", pipes, "the chain of pipes (default=ssssssss)")
-      ->check([pipes] (const std::string& p) {
-        if (p[0] == 'p') {
+  std::string input = "8:ssssssss";
+  app.add_option("-i,--input", input, "input format: num_lines:pipes (default=8:ssssssss)")
+      ->check([input] (const std::string& p) {
+        size_t colon_pos = p.find(':');
+        if (colon_pos == std::string::npos) {
+          return "input format should be num_lines:pipes (e.g., 8:ssssssss)";
+        }
+        std::string pipes = p.substr(colon_pos + 1);
+        if (pipes[0] == 'p') {
           return "the first pipe should be \"s\" (serial)";
         }
-        else if (p.size() > 16) {
+        else if (pipes.size() > 16) {
           return "no more than 16 pipes";
         }
-        else if (p.size() == 0) {
+        else if (pipes.size() == 0) {
           return "at least one pipe is required";
         }
         return "";
       });
 
   CLI11_PARSE(app, argc, argv);
+
+  // Parse input string to extract num_lines and pipes
+  size_t colon_pos = input.find(':');
+  unsigned num_lines = std::stoul(input.substr(0, colon_pos));
+  std::string pipes = input.substr(colon_pos + 1);
 
   std::cout << "model="       << model       << ' '
             << "num_threads=" << num_threads << ' '

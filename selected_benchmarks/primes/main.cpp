@@ -4,7 +4,8 @@
 void bench_primes(
   const std::string& model,
   const unsigned num_threads,
-  const unsigned num_rounds
+  const unsigned num_rounds,
+  const size_t input_limit
   ) {
 
   std::cout << std::setw(12) << "size"
@@ -16,7 +17,7 @@ void bench_primes(
 
   // for (size_t p = 10; p <= primes_limit; p*=10) {
     // size_t p = primes_limit;
-    size_t p = primes_limit * 5; // 
+    size_t p = input_limit; // 
 
     for(unsigned j=0; j<num_rounds; ++j) {
       if(model == "tf") {
@@ -49,6 +50,9 @@ int main(int argc, char* argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  size_t input_limit {primes_limit * 5};
+  app.add_option("-i,--input", input_limit, "primes limit (default=primes_limit*5)");
+
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name omp|tf|tbb (default=tf)")
      ->check([] (const std::string& m) {
@@ -64,9 +68,10 @@ int main(int argc, char* argv[]) {
             << "num_threads=" << num_threads << ' '
             << "num_rounds="  << num_rounds << ' '
             << "primes_limit="   << primes_limit << ' '
+            << "input_limit=" << input_limit << ' '
             << std::endl;
 
-  bench_primes(model, num_threads, num_rounds);
+  bench_primes(model, num_threads, num_rounds, input_limit);
 
   return 0;
 }

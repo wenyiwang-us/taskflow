@@ -16,7 +16,8 @@ unsigned char* RGB = nullptr;
 void mandelbrot(
   const std::string& model,
   const unsigned num_threads,
-  const unsigned num_rounds
+  const unsigned num_rounds,
+  const int image_size
   ) {
 
   std::cout << std::setw(12) << "size"
@@ -28,7 +29,7 @@ void mandelbrot(
 
     // int N = 3000; // 30-10s 2-16 threads
 
-    int N = 2500; // 22-4s 2-16 threads
+    int N = image_size; // 22-4s 2-16 threads
 
     W = N;
     H = N;
@@ -70,6 +71,9 @@ int main(int argc, char* argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  int image_size {2500};
+  app.add_option("-i,--input", image_size, "image size (default=2500)");
+
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tbb|omp|tf (default=tf)")
      ->check([] (const std::string& m) {
@@ -84,9 +88,10 @@ int main(int argc, char* argv[]) {
   std::cout << "model=" << model << ' '
             << "num_threads=" << num_threads << ' '
             << "num_rounds=" << num_rounds << ' '
+            << "image_size=" << image_size << ' '
             << std::endl;
 
-  mandelbrot(model, num_threads, num_rounds);
+  mandelbrot(model, num_threads, num_rounds, image_size);
 }
 
 

@@ -1272,232 +1272,159 @@ inline void Executor::_collect_stats() {
     return;
   }
 
-  uint64_t nexec_from_self = 0;
-  uint64_t nexec_from_remote = 0;
-  uint64_t nexec_from_executor = 0;
   csv_file << "worker_id,nexec_from_self,nexec_from_remote,nexec_from_executor";
 
   #ifdef TF_USE_XQUEUE
-  uint64_t ntasks_pushed_self = 0;
-  uint64_t ntasks_pushed_remote = 0;
-  uint64_t ntasks_popped_self = 0;
-  uint64_t ntasks_popped_remote = 0;
-  uint64_t ntasks_not_pushed = 0;
-  uint64_t ntasks_not_popped = 0;
+
   csv_file << ",ntasks_pushed_self,ntasks_pushed_remote,ntasks_popped_self,ntasks_popped_remote,ntasks_not_pushed,ntasks_not_popped";
-  
+
   #ifdef TF_ENABLE_WS
-  // Thief side
-  uint64_t nrequests_steal_called = 0;
-  uint64_t nrequests_attempted = 0;
-  uint64_t nrequests_sent = 0;
-  // Victim side
-  uint64_t nhandled_attempted = 0;
-  uint64_t nhandled_stolen = 0;
-  uint64_t nhandled_not_stolen = 0;
+
   csv_file << ",nrequests_attempted,nrequests_sent,nhandled_attempted,nhandled_stolen,nhandled_not_stolen";
 
   #endif // TF_ENABLE_WS
 
   #else
-  uint64_t ntasks_pushed_wsq = 0;
-  uint64_t ntasks_not_pushed_wsq = 0;
-  uint64_t ntasks_popped_wsq = 0;
-  uint64_t ntasks_not_popped_wsq = 0;
-  uint64_t ntasks_stolen_wsq = 0;
-  uint64_t ntasks_not_stolen_wsq = 0;
-  csv_file << ",ntasks_pushed_wsq,ntasks_not_pushed_wsq,ntasks_popped_wsq,ntasks_not_popped_wsq,ntasks_stolen_wsq,ntasks_not_stolen_wsq";
+
+  csv_file << ",ntasks_pushed_wsq,ntasks_not_pushed_wsq,ntasks_popped_wsq,ntasks_not_popped_wsq,ntasks_stolen_remote,ntasks_not_stolen_remote";
 
   #endif
+
   csv_file << "\n";
 
   for(auto& w : _workers) {
-    #ifdef TF_USE_XQUEUE
-    ntasks_pushed_self += w._xq->ntasks_pushed_self;
-    ntasks_pushed_remote += w._xq->ntasks_pushed_remote;
-    ntasks_popped_self += w._xq->ntasks_popped_self;
-    ntasks_popped_remote += w._xq->ntasks_popped_remote;
-    ntasks_not_pushed += w._xq->ntasks_not_pushed;
-    ntasks_not_popped += w._xq->ntasks_not_popped;
-    #ifdef TF_ENABLE_WS
-    nrequests_steal_called += w._xq->nrequests_steal_called;
-    nrequests_attempted += w._xq->nrequests_attempted;
-    nrequests_sent += w._xq->nrequests_sent;
-    nhandled_attempted += w._xq->nhandled_attempted;
-    nhandled_stolen += w._xq->nhandled_stolen;
-    nhandled_not_stolen += w._xq->nhandled_not_stolen;
-    #endif // TF_ENABLE_WS
-    // Percentage
-    auto total_pushed = w._xq->ntasks_pushed_self + w._xq->ntasks_pushed_remote;
-    auto total_popped = w._xq->ntasks_popped_self + w._xq->ntasks_popped_remote;
-    auto total_pop_ops = total_popped + w._xq->ntasks_not_popped;
-    auto total_push_ops = total_pushed + w._xq->ntasks_not_pushed;
+    // #ifdef TF_USE_XQUEUE
+    // ntasks_pushed_self += w._xq->ntasks_pushed_self;
+    // ntasks_pushed_remote += w._xq->ntasks_pushed_remote;
+    // ntasks_popped_self += w._xq->ntasks_popped_self;
+    // ntasks_popped_remote += w._xq->ntasks_popped_remote;
+    // ntasks_not_pushed += w._xq->ntasks_not_pushed;
+    // ntasks_not_popped += w._xq->ntasks_not_popped;
+    // #ifdef TF_ENABLE_WS
+    // nrequests_steal_called += w._xq->nrequests_steal_called;
+    // nrequests_attempted += w._xq->nrequests_attempted;
+    // nrequests_sent += w._xq->nrequests_sent;
+    // nhandled_attempted += w._xq->nhandled_attempted;
+    // nhandled_stolen += w._xq->nhandled_stolen;
+    // nhandled_not_stolen += w._xq->nhandled_not_stolen;
+    // #endif // TF_ENABLE_WS
+    // // Percentage
+    // auto total_pushed = w._xq->ntasks_pushed_self + w._xq->ntasks_pushed_remote;
+    // auto total_popped = w._xq->ntasks_popped_self + w._xq->ntasks_popped_remote;
+    // auto total_pop_ops = total_popped + w._xq->ntasks_not_popped;
+    // auto total_push_ops = total_pushed + w._xq->ntasks_not_pushed;
 
-    double p_pushed_self = static_cast<double>(w._xq->ntasks_pushed_self) / total_pushed * 100.0;
-    double p_pushed_remote = static_cast<double>(w._xq->ntasks_pushed_remote) / total_pushed * 100.0;
-    double p_popped_self = static_cast<double>(w._xq->ntasks_popped_self) / total_popped * 100.0;
-    double p_popped_remote = static_cast<double>(w._xq->ntasks_popped_remote) / total_popped * 100.0;
-    double p_not_pushed = static_cast<double>(w._xq->ntasks_not_pushed) / total_push_ops * 100.0;
-    double p_not_popped = static_cast<double>(w._xq->ntasks_not_popped) / total_pop_ops * 100.0;
+    // double p_pushed_self = static_cast<double>(w._xq->ntasks_pushed_self) / total_pushed * 100.0;
+    // double p_pushed_remote = static_cast<double>(w._xq->ntasks_pushed_remote) / total_pushed * 100.0;
+    // double p_popped_self = static_cast<double>(w._xq->ntasks_popped_self) / total_popped * 100.0;
+    // double p_popped_remote = static_cast<double>(w._xq->ntasks_popped_remote) / total_popped * 100.0;
+    // double p_not_pushed = static_cast<double>(w._xq->ntasks_not_pushed) / total_push_ops * 100.0;
+    // double p_not_popped = static_cast<double>(w._xq->ntasks_not_popped) / total_pop_ops * 100.0;
 
-    #ifdef TF_ENABLE_WS
-    double p_requests_attempted = static_cast<double>(w._xq->nrequests_attempted) / w._xq->nrequests_steal_called * 100.0;
-    double p_requests_sent = static_cast<double>(w._xq->nrequests_sent) / w._xq->nrequests_attempted * 100.0;
+    // #ifdef TF_ENABLE_WS
+    // double p_requests_attempted = static_cast<double>(w._xq->nrequests_attempted) / w._xq->nrequests_steal_called * 100.0;
+    // double p_requests_sent = static_cast<double>(w._xq->nrequests_sent) / w._xq->nrequests_attempted * 100.0;
 
-    double p_handled_stolen = static_cast<double>(w._xq->nhandled_stolen) / w._xq->nhandled_attempted * 100.0;
-    double p_handled_not_stolen = static_cast<double>(w._xq->nhandled_not_stolen) / w._xq->nhandled_attempted * 100.0;
-    #endif // TF_ENABLE_WS
+    // double p_handled_stolen = static_cast<double>(w._xq->nhandled_stolen) / w._xq->nhandled_attempted * 100.0;
+    // double p_handled_not_stolen = static_cast<double>(w._xq->nhandled_not_stolen) / w._xq->nhandled_attempted * 100.0;
+    // #endif // TF_ENABLE_WS
 
-    #else
-    ntasks_pushed_wsq += w._wsq.ntasks_pushed_wsq;
-    ntasks_not_pushed_wsq += w._wsq.ntasks_not_pushed_wsq;
-    ntasks_popped_wsq += w._wsq.ntasks_popped_wsq;
-    ntasks_not_popped_wsq += w._wsq.ntasks_not_popped_wsq;
-    ntasks_stolen_wsq += w._wsq.ntasks_stolen_wsq;
-    ntasks_not_stolen_wsq += w._wsq.ntasks_not_stolen_wsq;
-    // Percentage
-    auto total_pushed = w._wsq.ntasks_pushed_wsq + w._wsq.ntasks_not_pushed_wsq;
-    auto total_popped = w._wsq.ntasks_popped_wsq + w._wsq.ntasks_not_popped_wsq;
-    auto total_stolen = w._wsq.ntasks_stolen_wsq + w._wsq.ntasks_not_stolen_wsq;
+    // #else
+    // ntasks_pushed_wsq += w._wsq.ntasks_pushed_wsq;
+    // ntasks_not_pushed_wsq += w._wsq.ntasks_not_pushed_wsq;
+    // ntasks_popped_wsq += w._wsq.ntasks_popped_wsq;
+    // ntasks_not_popped_wsq += w._wsq.ntasks_not_popped_wsq;
+    // ntasks_stolen_wsq += w._wsq.ntasks_stolen_wsq;
+    // ntasks_not_stolen_wsq += w._wsq.ntasks_not_stolen_wsq;
+    // // Percentage
+    // auto total_pushed = w._wsq.ntasks_pushed_wsq + w._wsq.ntasks_not_pushed_wsq;
+    // auto total_popped = w._wsq.ntasks_popped_wsq + w._wsq.ntasks_not_popped_wsq;
+    // auto total_stolen = w._wsq.ntasks_stolen_wsq + w._wsq.ntasks_not_stolen_wsq;
 
-    double p_pushed_wsq = static_cast<double>(w._wsq.ntasks_pushed_wsq) / total_pushed * 100.0;
-    double p_not_pushed_wsq = static_cast<double>(w._wsq.ntasks_not_pushed_wsq) / total_pushed * 100.0;
-    double p_popped_wsq = static_cast<double>(w._wsq.ntasks_popped_wsq) / total_popped * 100.0;
-    double p_not_popped_wsq = static_cast<double>(w._wsq.ntasks_not_popped_wsq) / total_popped * 100.0;
-    double p_stolen_wsq = static_cast<double>(w._wsq.ntasks_stolen_wsq) / total_stolen * 100.0;
-    double p_not_stolen_wsq = static_cast<double>(w._wsq.ntasks_not_stolen_wsq) / total_stolen * 100.0;
-    #endif
-    nexec_from_self += w.nexec_from_self;
-    nexec_from_remote += w.nexec_from_remote;
-    nexec_from_executor += w.nexec_from_executor;
-    auto total_exec = w.nexec_from_self + w.nexec_from_remote + w.nexec_from_executor;
-    double p_exec_from_self = static_cast<double>(w.nexec_from_self) / total_exec * 100.0;
-    double p_exec_from_remote = static_cast<double>(w.nexec_from_remote) / total_exec * 100.0;
-    double p_exec_from_executor = static_cast<double>(w.nexec_from_executor) / total_exec * 100.0; 
+    // double p_pushed_wsq = static_cast<double>(w._wsq.ntasks_pushed_wsq) / total_pushed * 100.0;
+    // double p_not_pushed_wsq = static_cast<double>(w._wsq.ntasks_not_pushed_wsq) / total_pushed * 100.0;
+    // double p_popped_wsq = static_cast<double>(w._wsq.ntasks_popped_wsq) / total_popped * 100.0;
+    // double p_not_popped_wsq = static_cast<double>(w._wsq.ntasks_not_popped_wsq) / total_popped * 100.0;
+    // double p_stolen_wsq = static_cast<double>(w._wsq.ntasks_stolen_wsq) / total_stolen * 100.0;
+    // double p_not_stolen_wsq = static_cast<double>(w._wsq.ntasks_not_stolen_wsq) / total_stolen * 100.0;
+    // #endif
+    // nexec_from_self += w.nexec_from_self;
+    // nexec_from_remote += w.nexec_from_remote;
+    // nexec_from_executor += w.nexec_from_executor;
+    // auto total_exec = w.nexec_from_self + w.nexec_from_remote + w.nexec_from_executor;
+    // double p_exec_from_self = static_cast<double>(w.nexec_from_self) / total_exec * 100.0;
+    // double p_exec_from_remote = static_cast<double>(w.nexec_from_remote) / total_exec * 100.0;
+    // double p_exec_from_executor = static_cast<double>(w.nexec_from_executor) / total_exec * 100.0; 
 
-    // Print statistics for each worker
-    printf("Worker %zu: "
-    #ifdef TF_USE_XQUEUE
-    "Self-push = %lu (%.2f%%), Remote-push = %lu (%.2f%%), "
-    "Self-pop = %lu (%.2f%%), Remote-pop = %lu (%.2f%%), "
-    "Not-pushed = %lu (%.2f%%), Not-popped = %lu (%.2f%%), "
-    #ifdef TF_ENABLE_WS
-    "Requests-attempted = %lu (%.2f%%), Requests-sent = %lu (%.2f%%), "
-    "Handled-stolen = %lu (%.2f%%), Handled-not-stolen = %lu (%.2f%%), Handled-attempted = %lu, "
-    #endif // TF_ENABLE_WS
-    #else
-    "WSQ-push = %lu (%.2f%%), WSQ-not-pushed = %lu (%.2f%%), "
-    "WSQ-pop = %lu (%.2f%%), WSQ-not-popped = %lu (%.2f%%), "
-    "WSQ-stolen = %lu (%.2f%%), WSQ-not-stolen = %lu (%.2f%%), "
-    #endif
-    "Self-exec = %lu (%.2f%%), Remote-exec = %lu (%.2f%%), Executor-exec = %lu (%.2f%%),"
-    "Max-exec-time = %lu, Min-exec-time = %lu\n",
-    w._id,
-    #ifdef TF_USE_XQUEUE
-    w._xq->ntasks_pushed_self, p_pushed_self, w._xq->ntasks_pushed_remote, p_pushed_remote,
-    w._xq->ntasks_popped_self, p_popped_self, w._xq->ntasks_popped_remote, p_popped_remote,
-    w._xq->ntasks_not_pushed, p_not_pushed, w._xq->ntasks_not_popped, p_not_popped,
-    #ifdef TF_ENABLE_WS
-    w._xq->nrequests_attempted, p_requests_attempted, w._xq->nrequests_sent, p_requests_sent,
-    w._xq->nhandled_stolen, p_handled_stolen, w._xq->nhandled_not_stolen, p_handled_not_stolen,
-    w._xq->nhandled_attempted,
-    #endif // TF_ENABLE_WS
-    #else
-    w._wsq.ntasks_pushed_wsq, p_pushed_wsq, w._wsq.ntasks_not_pushed_wsq, p_not_pushed_wsq,
-    w._wsq.ntasks_popped_wsq, p_popped_wsq, w._wsq.ntasks_not_popped_wsq, p_not_popped_wsq,
-    w._wsq.ntasks_stolen_wsq, p_stolen_wsq, w._wsq.ntasks_not_stolen_wsq, p_not_stolen_wsq,
-    #endif
-    w.nexec_from_self, p_exec_from_self,
-    w.nexec_from_remote, p_exec_from_remote,
-    w.nexec_from_executor, p_exec_from_executor,
-    w.max_exec_time, w.min_exec_time
-    );
+    // // Print statistics for each worker
+    // printf("Worker %zu: "
+    // #ifdef TF_USE_XQUEUE
+    // "Self-push = %lu (%.2f%%), Remote-push = %lu (%.2f%%), "
+    // "Self-pop = %lu (%.2f%%), Remote-pop = %lu (%.2f%%), "
+    // "Not-pushed = %lu (%.2f%%), Not-popped = %lu (%.2f%%), "
+    // #ifdef TF_ENABLE_WS
+    // "Requests-attempted = %lu (%.2f%%), Requests-sent = %lu (%.2f%%), "
+    // "Handled-stolen = %lu (%.2f%%), Handled-not-stolen = %lu (%.2f%%), Handled-attempted = %lu, "
+    // #endif // TF_ENABLE_WS
+    // #else
+    // "WSQ-push = %lu (%.2f%%), WSQ-not-pushed = %lu (%.2f%%), "
+    // "WSQ-pop = %lu (%.2f%%), WSQ-not-popped = %lu (%.2f%%), "
+    // "WSQ-stolen = %lu (%.2f%%), WSQ-not-stolen = %lu (%.2f%%), "
+    // #endif
+    // "Self-exec = %lu (%.2f%%), Remote-exec = %lu (%.2f%%), Executor-exec = %lu (%.2f%%),"
+    // "Max-exec-time = %lu, Min-exec-time = %lu\n",
+    // w._id,
+    // #ifdef TF_USE_XQUEUE
+    // w._xq->ntasks_pushed_self, p_pushed_self, w._xq->ntasks_pushed_remote, p_pushed_remote,
+    // w._xq->ntasks_popped_self, p_popped_self, w._xq->ntasks_popped_remote, p_popped_remote,
+    // w._xq->ntasks_not_pushed, p_not_pushed, w._xq->ntasks_not_popped, p_not_popped,
+    // #ifdef TF_ENABLE_WS
+    // w._xq->nrequests_attempted, p_requests_attempted, w._xq->nrequests_sent, p_requests_sent,
+    // w._xq->nhandled_stolen, p_handled_stolen, w._xq->nhandled_not_stolen, p_handled_not_stolen,
+    // w._xq->nhandled_attempted,
+    // #endif // TF_ENABLE_WS
+    // #else
+    // w._wsq.ntasks_pushed_wsq, p_pushed_wsq, w._wsq.ntasks_not_pushed_wsq, p_not_pushed_wsq,
+    // w._wsq.ntasks_popped_wsq, p_popped_wsq, w._wsq.ntasks_not_popped_wsq, p_not_popped_wsq,
+    // w._wsq.ntasks_stolen_wsq, p_stolen_wsq, w._wsq.ntasks_not_stolen_wsq, p_not_stolen_wsq,
+    // #endif
+    // w.nexec_from_self, p_exec_from_self,
+    // w.nexec_from_remote, p_exec_from_remote,
+    // w.nexec_from_executor, p_exec_from_executor,
+    // w.max_exec_time, w.min_exec_time
+    // );
 
     csv_file << w._id << ","
-             << w.nexec_from_self << ","
-             << w.nexec_from_remote << ","
-             << w.nexec_from_executor;
+             << w._nexec_from_self << ","
+             << w._nexec_from_remote << ","
+             << w._nexec_from_executor;
     #ifdef TF_USE_XQUEUE
     csv_file << ","
-             << w._xq->ntasks_pushed_self << ","
-             << w._xq->ntasks_pushed_remote << ","
-             << w._xq->ntasks_popped_self << ","
-             << w._xq->ntasks_popped_remote << ","
-             << w._xq->ntasks_not_pushed << ","
-             << w._xq->ntasks_not_popped;
+             << w._xq->_ntasks_pushed_self << ","
+             << w._xq->_ntasks_pushed_remote << ","
+             << w._xq->_ntasks_popped_self << ","
+             << w._xq->_ntasks_popped_remote << ","
+             << w._xq->_ntasks_not_pushed << ","
+             << w._xq->_ntasks_not_popped;
     #ifdef TF_ENABLE_WS
     csv_file << ","
-             << w._xq->nrequests_attempted << ","
-             << w._xq->nrequests_sent << ","
-             << w._xq->nhandled_attempted << ","
-             << w._xq->nhandled_stolen << ","
-             << w._xq->nhandled_not_stolen;
+             << w._xq->_nrequests_attempted << ","
+             << w._xq->_nrequests_sent << ","
+             << w._xq->_nhandled_attempted << ","
+             << w._xq->_nhandled_stolen << ","
+             << w._xq->_nhandled_not_stolen;
     #endif // TF_ENABLE_WS
     #else
     csv_file << ","
-             << w._wsq.ntasks_pushed_wsq << ","
-             << w._wsq.ntasks_not_pushed_wsq << ","
-             << w._wsq.ntasks_popped_wsq << ","
-             << w._wsq.ntasks_not_popped_wsq << ","
-             << w._wsq.ntasks_stolen_wsq << ","
-             << w._wsq.ntasks_not_stolen_wsq;
+             << w._wsq._ntasks_pushed_wsq << ","
+             << w._wsq._ntasks_not_pushed_wsq << ","
+             << w._wsq._ntasks_popped_wsq << ","
+             << w._wsq._ntasks_not_popped_wsq << ","
+             << w._wsq._ntasks_stolen_remote << ","
+             << w._wsq._ntasks_not_stolen_remote;
     #endif
     csv_file << "\n";
   }
-  // // Calculate total statistics
-  // #ifdef TF_USE_XQUEUE
-  // auto total_pushed_at = ntasks_pushed_self + ntasks_pushed_remote;
-  // auto total_popped_at = ntasks_popped_self + ntasks_popped_remote;
-  // auto total_pop_ops_at = total_popped_at + ntasks_not_popped;
-  // auto total_push_ops_at = total_pushed_at + ntasks_not_pushed;
-
-  // double p_pushed_self_at = static_cast<double>(ntasks_pushed_self) / total_pushed_at * 100.0;
-  // double p_pushed_remote_at = static_cast<double>(ntasks_pushed_remote) / total_pushed_at * 100.0;
-  // double p_popped_self_at = static_cast<double>(ntasks_popped_self) / total_popped_at * 100.0;
-  // double p_popped_remote_at = static_cast<double>(ntasks_popped_remote) / total_popped_at * 100.0;
-  // double p_not_pushed_at = static_cast<double>(ntasks_not_pushed) / total_push_ops_at * 100.0;
-  // double p_not_popped_at = static_cast<double>(ntasks_not_popped) / total_pop_ops_at * 100.0;
-
-  // #else
-  // auto total_pushed_wsq_at = ntasks_pushed_wsq + ntasks_not_pushed_wsq;
-  // auto total_popped_wsq_at = ntasks_popped_wsq + ntasks_not_popped_wsq;
-  // auto total_stolen_wsq_at = ntasks_stolen_wsq + ntasks_not_stolen_wsq;
-  // double p_pushed_wsq_at = static_cast<double>(ntasks_pushed_wsq) / total_pushed_wsq_at * 100.0;
-  // double p_not_pushed_wsq_at = static_cast<double>(ntasks_not_pushed_wsq) / total_pushed_wsq_at * 100.0;
-  // double p_popped_wsq_at = static_cast<double>(ntasks_popped_wsq) / total_popped_wsq_at * 100.0;
-  // double p_not_popped_wsq_at = static_cast<double>(ntasks_not_popped_wsq) / total_popped_wsq_at * 100.0;
-  // double p_stolen_wsq_at = static_cast<double>(ntasks_stolen_wsq) / total_stolen_wsq_at * 100.0;
-  // double p_not_stolen_wsq_at = static_cast<double>(ntasks_not_stolen_wsq) / total_stolen_wsq_at * 100.0;
-
-  // #endif
-  // auto total_exec_at = nexec_from_self + nexec_from_remote + nexec_from_executor;
-  // double p_exec_from_self_at = static_cast<double>(nexec_from_self) / total_exec_at * 100.0;
-  // double p_exec_from_remote_at = static_cast<double>(nexec_from_remote) / total_exec_at * 100.0;
-  // double p_exec_from_executor_at = static_cast<double>(nexec_from_executor) / total_exec_at * 100.0;
-
-  // printf("Total: "
-  // #ifdef TF_USE_XQUEUE
-  // "Self-push = %lu (%.2f%%), Remote-push = %lu (%.2f%%), "  
-  // "Self-pop = %lu (%.2f%%), Remote-pop = %lu (%.2f%%), "
-  // "Not-pushed = %lu (%.2f%%), Not-popped = %lu (%.2f%%), "
-  // #else
-  // "WSQ-push = %lu (%.2f%%), WSQ-not-pushed = %lu (%.2f%%), "
-  // "WSQ-pop = %lu (%.2f%%), WSQ-not-popped = %lu (%.2f%%), "
-  // "WSQ-stolen = %lu (%.2f%%), WSQ-not-stolen = %lu (%.2f%%), "
-  // #endif
-  // "Self-exec = %lu (%.2f%%), Remote-exec = %lu (%.2f%%), Executor-exec = %lu (%.2f%%)\n",
-  // #ifdef TF_USE_XQUEUE
-  // total_pushed_at, p_pushed_self_at, total_pushed_at, p_pushed_remote_at,
-  // total_popped_at, p_popped_self_at, total_popped_at, p_popped_remote_at,
-  // total_push_ops_at, p_not_pushed_at, total_pop_ops_at, p_not_popped_at,
-  // #else
-  // ntasks_pushed_wsq, p_pushed_wsq_at, ntasks_not_pushed_wsq, p_not_pushed_wsq_at,
-  // ntasks_popped_wsq, p_popped_wsq_at, ntasks_not_popped_wsq, p_not_popped_wsq_at,
-  // ntasks_stolen_wsq, p_stolen_wsq_at, ntasks_not_stolen_wsq, p_not_stolen_wsq_at,
-  // #endif
-  // nexec_from_self, p_exec_from_self_at, nexec_from_remote, p_exec_from_remote_at,
-  // nexec_from_executor, p_exec_from_executor_at
-  // );
 
   printf("Centralized freelist pushed %lu tasks.\n",
     _buffers.ntasks_pushed_centralized
@@ -1550,46 +1477,36 @@ inline int Executor::this_worker_id() const {
 #if TF_USE_XQUEUE
 // Custom Procedure: _spawn for XQueue
 inline void Executor::_spawn(size_t N) {
-  #ifdef TF_ENABLE_PROFILE
-  auto ref = _profiler.get_new_ref(EventType::EXECUTOR);
-  _profiler.record(EventType::EXECUTOR, ref, ref);
-  #endif
 
   // get envs
-  size_t nsteals_shift {0};
+  size_t nsteals {1};
   size_t nvtm {1};
-  if(getenv("TF_NSTEALS_SHIFT")) {
-    nsteals_shift = std::stoul(getenv("TF_NSTEALS_SHIFT"));
+  size_t nwaits {1000};
+  if(getenv("TF_NSTEALS")) {
+    nsteals = std::stoul(getenv("TF_NSTEALS"));
   }
-  if(getenv("TF_NVTM")) {
-    nvtm = std::stoul(getenv("TF_NVTM"));
+  if(getenv("TF_NVTMS")) {
+    nvtm = std::stoul(getenv("TF_NVTMS"));
   }
+  if(getenv("TF_NWAITS")) {
+    nwaits = std::stoul(getenv("TF_NWAITS"));
+  }
+
   // print to stderr
-  fprintf(stderr, "Executor intializing with %zu workers, nsteals_shift: %zu, nvtm: %zu\n", N, nsteals_shift, nvtm);
+  fprintf(stderr, "Executor intializing with %zu workers, nsteals: %zu, nvtm: %zu, nwaits: %zu\n", N, nsteals, nvtm, nwaits);
 
   for(size_t id=0; id<N; ++id) {
     _workers[id]._id = id;
     _workers[id]._vtm = id;
     _workers[id]._executor = this;
     // _workers[id]._waiter = &_notifier._waiters[id];
-    _workers[id].xq_init(_num_workers, id, nsteals_shift, nvtm);
+    _workers[id].xq_init(_num_workers, id, nsteals, nvtm, nwaits);
     _workers[id]._xq->_workers = &_workers;
-    #ifdef TF_ENABLE_PROFILE
-    _workers[id]._profiler = new PerThreadTaskProfiler(id);
-    if(!_workers[id]._profiler) {
-      printf("Failed to create profiler for worker %lu\n", id);
-      exit(1);
-    }
-    #endif
   }
 
   for(size_t id=0; id<N; ++id) {
     _workers[id]._thread = std::thread([&, &w=_workers[id]] () {
       pt::this_worker = &w;
-      #ifdef TF_ENABLE_PROFILE
-      auto tref = w._profiler->get_new_ref(EventType::THREAD);
-      w._profiler->record(EventType::THREAD, ref, ref);
-      #endif
 
       // initialize the random engine and seed for work-stealing loop
       w._rdgen.seed(static_cast<std::default_random_engine::result_type>(
@@ -1650,13 +1567,6 @@ inline void Executor::_spawn(size_t N) {
     _workers[id]._executor = this;
     _workers[id]._waiter = &_notifier._waiters[id];
     _workers[id]._thread = std::thread([&, &w=_workers[id]] () {
-      #ifdef TF_ENABLE_PROFILE
-      w._profiler = new PerThreadTaskProfiler(id);
-      if(!w._profiler) {
-        printf("Failed to create profiler for worker %lu\n", id);
-        exit(1);
-      }
-      #endif
 
       pt::this_worker = &w;
 
@@ -1676,9 +1586,9 @@ inline void Executor::_spawn(size_t N) {
       // must use 1 as condition instead of !done because
       // the previous worker may stop while the following workers
       // are still preparing for entering the scheduling loop
-#ifndef TF_DISABLE_EXCEPTION_HANDLING
+  #ifndef TF_DISABLE_EXCEPTION_HANDLING
       try {
-#endif
+  #endif
 
         // worker loop
         while(1) {
@@ -1692,12 +1602,12 @@ inline void Executor::_spawn(size_t N) {
           }
         }
 
-#ifndef TF_DISABLE_EXCEPTION_HANDLING
+  #ifndef TF_DISABLE_EXCEPTION_HANDLING
       } 
       catch(...) {
         ptr = std::current_exception();
       }
-#endif
+  #endif
       
       // call the user-specified epilogue function
       if(_worker_interface) {
@@ -1713,26 +1623,10 @@ inline void Executor::_spawn(size_t N) {
 // Custom Procedure: _corun_until for XQueue
 template <typename P>
 inline void Executor::_corun_until(Worker& w, P&& stop_predicate) {
-  #ifdef TF_ENABLE_PROFILE
-  auto rref = w._profiler->get_ref(EventType::RUNTIME);
-  #endif
+
   while(!stop_predicate()){
-    #ifdef TF_ENABLE_PROFILE
-    auto popref = w._profiler->get_new_ref(EventType::QUEUE_POP);
-    w._profiler->record(EventType::RUNTIME_END | EventType::QUEUE_POP, rref, popref);
-    #endif
     if(auto t = w._xq->pop(); t) {
-      // printf("corun_until, before invoke: %p\n", t);
-      #ifdef TF_ENABLE_PROFILE
-      auto invokeref = w._profiler->get_new_ref(EventType::TASK);
-      w._profiler->record(EventType::QUEUE_POP_END | EventType::TASK, popref, invokeref);
-      #endif
-
       _invoke(w, t);
-
-      #ifdef TF_ENABLE_PROFILE 
-      w._profiler->record(EventType::TASK_END | EventType::QUEUE_POP_END, invokeref, popref);
-      #endif
     }
     // else {
     //   std::this_thread::yield();
@@ -1746,10 +1640,6 @@ inline void Executor::_corun_until(Worker& w, P&& stop_predicate) {
 // Function: _corun_until
 template <typename P>
 void Executor::_corun_until(Worker& w, P&& stop_predicate) {
-  #ifdef TF_ENABLE_PROFILE
-  auto cu_ref = w._profiler->get_new_ref(EventType::CORUN_UNTIL);
-  w._profiler->record(EventType::CORUN_UNTIL, cu_ref, cu_ref);
-  #endif
 
   const size_t MAX_STEALS = ((num_queues() + 1) << 1);
     
@@ -1762,14 +1652,7 @@ void Executor::_corun_until(Worker& w, P&& stop_predicate) {
     // here we don't do while-loop to drain out the local queue as it can
     // potentially enter a very deep recursive corun, cuasing stack overflow
     if(auto t = w._wsq.pop(); t) {
-      #ifdef TF_ENABLE_PROFILE
-      auto invokeref = w._profiler->get_new_ref(EventType::TASK);
-      w._profiler->record(EventType::TASK, cu_ref, invokeref);
-      #endif
       _invoke(w, t);
-      #ifdef TF_ENABLE_PROFILE
-      w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
-      #endif
     }
     else {
       // printf("steal from %lu\n", w._vtm);
@@ -1782,18 +1665,17 @@ void Executor::_corun_until(Worker& w, P&& stop_predicate) {
                                     _buffers.steal(vtm - _workers.size());
 
       if(t) {
-        #ifdef TF_ENABLE_PROFILE
-        auto invokeref = w._profiler->get_new_ref(EventType::TASK);
-        w._profiler->record(EventType::TASK, cu_ref, invokeref);
+        #ifdef TF_ENABLE_STATS
+        ++w._wsq._ntasks_stolen_remote;
         #endif
         _invoke(w, t);
-        #ifdef TF_ENABLE_PROFILE
-        w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
-        #endif
         w._vtm = vtm;
         goto exploit;
       }
       else if(!stop_predicate()) {
+        #ifdef TF_ENABLE_STATS
+        ++w._wsq._ntasks_not_stolen_remote;
+        #endif
         if(++num_steals > MAX_STEALS) {
           std::this_thread::yield();
         }
@@ -1801,13 +1683,13 @@ void Executor::_corun_until(Worker& w, P&& stop_predicate) {
         goto explore;
       }
       else {
+        #ifdef TF_ENABLE_STATS
+        ++w._wsq._ntasks_not_stolen_remote;
+        #endif
         break;
       }
     }
   }
-  #ifdef TF_ENABLE_PROFILE
-  w._profiler->record(EventType::CORUN_UNTIL_END, cu_ref, cu_ref);
-  #endif
 }
 #endif // TF_USE_XQUEUE: _corun_until
 
@@ -1840,9 +1722,17 @@ inline bool Executor::_explore_task(Worker& w, Node*& t) {
       : _buffers.steal(vtm - _workers.size());
 
     if(t) {
+      #ifdef TF_ENABLE_STATS
+      ++w._wsq._ntasks_stolen_remote;
+      #endif
       w._vtm = vtm;
       break;
     }
+    #ifdef TF_ENABLE_STATS
+    else {
+      ++w._wsq._ntasks_not_stolen_remote;
+    }
+    #endif
 
     // Increment the steal count, and if it exceeds MAX_STEALS, yield the thread.
     // If the number of *consecutive* empty steals reaches MAX_STEALS, exit the loop.
@@ -1876,15 +1766,7 @@ inline void Executor::_exploit_task(Worker& w, Node*& t) {
     t = w._xq->pop();
     if (t) {
       TF_DEBUG(w._id, "exploit_task: %p", t);
-      #ifdef TF_ENABLE_PROFILE
-      auto invokeref = w._profiler->get_new_ref(EventType::TASK);
-      auto cu_ref = w._profiler->get_ref(EventType::CORUN_UNTIL);
-      w._profiler->record(EventType::TASK, cu_ref, invokeref);
-      #endif
       _invoke(w, t);
-      #ifdef TF_ENABLE_PROFILE
-      w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
-      #endif
     }
   }while(t);
 }
@@ -1893,16 +1775,7 @@ inline void Executor::_exploit_task(Worker& w, Node*& t) {
 // Procedure: _exploit_task
 inline void Executor::_exploit_task(Worker& w, Node*& t) {
   while(t) {
-    // printf("exploit_task, before invoke: %p\n", t);
-    #ifdef TF_ENABLE_PROFILE
-    auto invokeref = w._profiler->get_new_ref(EventType::TASK);
-    auto cu_ref = w._profiler->get_ref(EventType::CORUN_UNTIL);
-    w._profiler->record(EventType::TASK, cu_ref, invokeref);
-    #endif
     _invoke(w, t);
-    #ifdef TF_ENABLE_PROFILE
-    w._profiler->record(EventType::CORUN_UNTIL, invokeref, cu_ref);
-    #endif
     t = w._wsq.pop();
   }
 }
@@ -1913,17 +1786,18 @@ inline void Executor::_exploit_task(Worker& w, Node*& t) {
 inline bool Executor::_wait_for_task(Worker& w, Node*& t) {
   // Do nothing, caller will busy wait
 
-#if __cplusplus >= TF_CPP20
+  #if __cplusplus >= TF_CPP20
   if(w._done.test(std::memory_order_relaxed)) {
-#else
+  #else
   if(w._done.load(std::memory_order_relaxed)) {
-#endif
+  #endif
     // _notifier.cancel_wait(w._waiter);
     return false;
   }
 
   return true;
 }
+
 #else
 // Function: _wait_for_task
 inline bool Executor::_wait_for_task(Worker& w, Node*& t) {
@@ -2205,10 +2079,6 @@ TF_FORCE_INLINE void Executor::_update_cache(Worker& worker, Node*& cache, Node*
   
 // Procedure: _invoke
 inline void Executor::_invoke(Worker& worker, Node* node) {
-  // printf("Worker %ld: invoke: %p\n", worker._id, node);
-  #ifdef TF_ENABLE_STATS
-  worker.invoke_start();
-  #endif // TF_ENABLE_STATS
 
   #define TF_INVOKE_CONTINUATION()  \
   if (cache) {                      \
@@ -2229,9 +2099,6 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
   if(node->_is_cancelled()) {
     _tear_down_invoke(worker, node, cache);
     TF_INVOKE_CONTINUATION();
-    #ifdef TF_ENABLE_STATS
-    worker.invoke_end();
-    #endif // TF_ENABLE_STATS
     return;
   }
 
@@ -2240,9 +2107,6 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     SmallVector<Node*> waiters;
     if(!node->_acquire_all(waiters)) {
       _schedule(worker, waiters.begin(), waiters.end());
-      #ifdef TF_ENABLE_STATS
-      worker.invoke_end();
-      #endif // TF_ENABLE_STATS
       return;
     }
   }
@@ -2254,12 +2118,12 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
   #ifdef TF_ENABLE_STATS
   if(static_cast<int>(worker._id) != node->_widx){
     if(node->_widx == -1) {
-      worker.nexec_from_executor++;
+      worker._nexec_from_executor++;
     }else{
-      worker.nexec_from_remote++;
+      worker._nexec_from_remote++;
     }
   }else{
-    worker.nexec_from_self++;
+    worker._nexec_from_self++;
   }
   #endif
   // switch is faster than nested if-else due to jump table
@@ -2273,9 +2137,6 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // runtime task
     case Node::RUNTIME:{
       if(_invoke_runtime_task(worker, node)) {
-        #ifdef TF_ENABLE_STATS
-        worker.invoke_end();
-        #endif // TF_ENABLE_STATS
         return;
       }
     }
@@ -2284,9 +2145,6 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // subflow task
     case Node::SUBFLOW: {
       if(_invoke_subflow_task(worker, node)) {
-        #ifdef TF_ENABLE_STATS
-        worker.invoke_end();
-        #endif // TF_ENABLE_STATS
         return;
       }
     }
@@ -2307,9 +2165,6 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // module task
     case Node::MODULE: {
       if(_invoke_module_task(worker, node)) {
-        #ifdef TF_ENABLE_STATS
-        worker.invoke_end();
-        #endif // TF_ENABLE_STATS
         return;
       }
     }
@@ -2318,16 +2173,10 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
     // async task
     case Node::ASYNC: {
       if(_invoke_async_task(worker, node)) {
-        #ifdef TF_ENABLE_STATS
-        worker.invoke_end();
-        #endif // TF_ENABLE_STATS
         return;
       }
       _tear_down_async(worker, node, cache);
       TF_INVOKE_CONTINUATION();
-      #ifdef TF_ENABLE_STATS
-      worker.invoke_end();
-      #endif // TF_ENABLE_STATS
       return;
     }
     break;
@@ -2339,9 +2188,6 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
       }
       _tear_down_dependent_async(worker, node, cache);
       TF_INVOKE_CONTINUATION();
-      #ifdef TF_ENABLE_STATS
-      worker.invoke_end();
-      #endif // TF_ENABLE_STATS
       return;
     }
     break;
@@ -2405,9 +2251,6 @@ inline void Executor::_invoke(Worker& worker, Node* node) {
   // clean up the node after execution
   _tear_down_invoke(worker, node, cache);
   TF_INVOKE_CONTINUATION();
-  #ifdef TF_ENABLE_STATS
-  worker.invoke_end();
-  #endif // TF_ENABLE_STATS
 }
 
 // Procedure: _tear_down_invoke

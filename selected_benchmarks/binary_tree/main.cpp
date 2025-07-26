@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
   size_t num_layers {25};
-  app.add_option("-l,--num_layers", num_layers, "number of layers (default=25)");
+  app.add_option("-i,--input", num_layers, "number of layers (default=25)");
 
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tbb|omp|tf (default=tf)")

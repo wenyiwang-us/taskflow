@@ -44,6 +44,7 @@ void mnist(
   const std::string& model,
   const unsigned min_epochs,
   const unsigned max_epochs,
+  const unsigned input_epochs,
   const unsigned num_threads,
   const unsigned num_rounds
 ) {
@@ -55,7 +56,7 @@ void mnist(
 
   // for(unsigned epochs=min_epochs; epochs <= max_epochs; epochs += 10) {
 
-    unsigned epochs = max_epochs;
+    unsigned epochs = input_epochs;
 
     double runtime  {0.0};
 
@@ -95,6 +96,9 @@ int main(int argc, char *argv[]){
   unsigned min_epochs {10};
   app.add_option("-e,--min_epochs", min_epochs, "min number of epochs (default=10)");
 
+  unsigned input_epochs {100};
+  app.add_option("-i,--input", input_epochs, "number of epochs to run (default=100)");
+
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
@@ -114,9 +118,10 @@ int main(int argc, char *argv[]){
             << "num_rounds=" << num_rounds << ' '
             << "min_epochs=" << min_epochs << ' '
             << "max_epochs=" << max_epochs << ' '
+            << "input_epochs=" << input_epochs << ' '
             << std::endl;
 
-  mnist(model, min_epochs, max_epochs, num_threads, num_rounds);
+  mnist(model, min_epochs, max_epochs, input_epochs, num_threads, num_rounds);
 
   return EXIT_SUCCESS;
 }

@@ -7,7 +7,8 @@ double **a = nullptr, **b = nullptr, **c = nullptr;
 void matrix_multiplication(
   const std::string& model,
   const unsigned num_threads,
-  const unsigned num_rounds
+  const unsigned num_rounds,
+  const int matrix_size
   ) {
 
   std::cout << std::setw(12) << "size"
@@ -19,7 +20,7 @@ void matrix_multiplication(
 
     // N = i;
 
-    N = 2048;
+    N = matrix_size;
 
     allocate_matrix();
 
@@ -57,6 +58,9 @@ int main(int argc, char* argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  int matrix_size {2048};
+  app.add_option("-i,--input", matrix_size, "matrix size (default=2048)");
+
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tbb|omp|tf (default=tf)")
      ->check([] (const std::string& m) {
@@ -71,9 +75,10 @@ int main(int argc, char* argv[]) {
   std::cout << "model=" << model << ' '
             << "num_threads=" << num_threads << ' '
             << "num_rounds=" << num_rounds << ' '
+            << "matrix_size=" << matrix_size << ' '
             << std::endl;
 
-  matrix_multiplication(model, num_threads, num_rounds);
+  matrix_multiplication(model, num_threads, num_rounds, matrix_size);
 
   return 0;
 }

@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
   size_t log_length {25};
-  app.add_option("-l,--log_length", log_length, "length in log scale (default=25)");
+  app.add_option("-i,--input", log_length, "length in log scale (default=25)");
 
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tbb|omp|tf (default=tf)")

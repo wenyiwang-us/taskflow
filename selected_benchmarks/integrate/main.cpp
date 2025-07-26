@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
   app.add_option("-t,--num_threads", num_threads, "number of threads (default=1)");
   
   size_t max_value {2000};
-  app.add_option("-v,--value", max_value, "max x-value (default=100)");
+  app.add_option("-i,--input", max_value, "max x-value (default=100)");
 
   size_t num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");

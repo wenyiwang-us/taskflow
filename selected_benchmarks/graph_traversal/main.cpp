@@ -11,6 +11,9 @@ int main(int argc, char* argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  int graph_size {4500};
+  app.add_option("-i,--input", graph_size, "graph size (default=4500)");
+
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tbb|omp|tf (default=tf)")
      ->check([] (const std::string& m) {
@@ -25,6 +28,7 @@ int main(int argc, char* argv[]) {
   std::cout << "model=" << model << ' '
             << "num_threads=" << num_threads << ' '
             << "num_rounds=" << num_rounds << ' '
+            << "graph_size=" << graph_size << ' '
             << std::endl;
 
   std::cout << std::setw(12) << "|V|+|E|"
@@ -35,7 +39,7 @@ int main(int argc, char* argv[]) {
   // for(int i=1; i<=451; i += 15) {
 
     // int i = 451;
-    int i = 4500;
+    int i = graph_size;
 
     double runtime {0.0};
 

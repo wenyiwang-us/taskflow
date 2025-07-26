@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     });
 
   std::string pattern = "1";
-  app.add_option("-p, --pattern", pattern, "x264 video pattern (default=1). Check deferred_pipeline.hpp for detailed frame patterns.")
+  app.add_option("-i,--input", pattern, "x264 video pattern (default=1). Check deferred_pipeline.hpp for detailed frame patterns.")
     ->check([] (const std::string& p) {
       if(p != "1" && p != "2") {
         return "video patterns should be \"1\" or \"2\"";

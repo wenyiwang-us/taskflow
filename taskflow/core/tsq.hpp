@@ -65,14 +65,15 @@ namespace tf {
     static_assert(std::is_pointer_v<T>, "<XQueue>: T must be a pointer type.");
 
     // Longer Master Dequeue
-    constexpr static size_t MasterDequeueSize = int64_t{1} << (LogSize + 3);
-    constexpr static size_t ExecutorDequeueSize = int64_t{1} << (LogSize + 4);
-    constexpr static size_t ExecutorDequeueMask = (ExecutorDequeueSize - 1);
-    constexpr static size_t MasterDequeueMask = (MasterDequeueSize - 1);
+    // constexpr static uint64_t MasterDequeueSize = uint64_t{1} << (LogSize + 3);
+    constexpr static uint64_t MasterDequeueSize = uint64_t{1} << (LogSize);
+    constexpr static uint64_t ExecutorDequeueSize = uint64_t{1} << (LogSize + 4);
+    constexpr static uint64_t ExecutorDequeueMask = (ExecutorDequeueSize - 1);
+    constexpr static uint64_t MasterDequeueMask = (MasterDequeueSize - 1);
 
     // Auxiliary Dequeue
-    constexpr static int64_t DequeueSize = int64_t{1} << LogSize;
-    constexpr static int64_t DequeueMask = (DequeueSize - 1);
+    constexpr static uint64_t DequeueSize = uint64_t{1} << LogSize;
+    constexpr static uint64_t DequeueMask = (DequeueSize - 1);
 
     static_assert((MasterDequeueSize >= 2) &&
                   ((MasterDequeueSize & (MasterDequeueSize - 1)) == 0));
@@ -91,13 +92,13 @@ namespace tf {
     size_t _last_q {0};    // Points to the last queue that was used to push a task
     uint64_t _nops_empty {0}; // number of empty queue pop, used to periodically send request
     size_t _last_q_popped {0}; // points to the last queue that was popped from
-    bool _has_tasks {false}; // whether the queue has tasks, caution: this may experience false sharing
 
-    size_t _nsteals_shift; // number of shifts to calculate the number of steals
-    size_t _nvtm; // number of victim threads
+    size_t _nsteals; // number of shifts to calculate the number of steals
+    size_t _nvtm; // number of victim to steal each time
+    size_t _nwaits; // number of waits
 
     // Shared by all other workers
-    alignas(2 * TF_CACHELINE_SIZE) size_t _last_q_accessed {0}; // points to the last queue that was accessed
+    alignas(2 * TF_CACHELINE_SIZE) uint64_t _last_q_accessed {0}; // points to the last queue that was accessed
     alignas(2 * TF_CACHELINE_SIZE) uint64_t _steal_request {0}; // steal request from other workers (thief)
     alignas(2 * TF_CACHELINE_SIZE) uint64_t _round {1}; // round number of reading the steal request
     
@@ -105,7 +106,7 @@ namespace tf {
   public:
 
     // Constructor
-    BoundedXQueue(const size_t nworkers, const size_t worker_id, const size_t nsteals_shift, const size_t nvtm);
+    BoundedXQueue(const size_t nworkers, const size_t worker_id, const size_t nsteals, const size_t nvtm, const size_t nwaits);
     ~BoundedXQueue();
 
     /**
@@ -143,47 +144,32 @@ namespace tf {
 
 
     #ifdef TF_ENABLE_STATS
-    uint64_t ntasks_pushed_self {0};
-    uint64_t ntasks_pushed_remote {0};
-    uint64_t ntasks_not_pushed {0};
-    uint64_t ntasks_popped_self {0};
-    uint64_t ntasks_popped_remote {0};
-    uint64_t ntasks_not_popped {0};
+    uint64_t _ntasks_pushed_self {0};
+    uint64_t _ntasks_pushed_remote {0};
+    uint64_t _ntasks_not_pushed {0};
+    uint64_t _ntasks_popped_self {0};
+    uint64_t _ntasks_popped_remote {0};
+    uint64_t _ntasks_not_popped {0};
 
     #ifdef TF_ENABLE_WS
     // Thief side
-    uint64_t nrequests_steal_called {0};
-    uint64_t nrequests_attempted {0};
-    uint64_t nrequests_sent {0};
+    uint64_t _nrequests_steal_called {0};
+    uint64_t _nrequests_attempted {0};
+    uint64_t _nrequests_sent {0};
     // Victim side
-    uint64_t nhandled_attempted {0};
-    uint64_t nhandled_stolen {0};
-    uint64_t nhandled_not_stolen {0};
+    uint64_t _nhandled_attempted {0};
+    uint64_t _nhandled_stolen {0};
+    uint64_t _nhandled_not_stolen {0};
 
     #endif // TF_ENABLE_WS
     #endif // TF_ENABLE_STATS
     
     private:
 
-    inline TaskQueueCode _push_local_with_load_balance(T item);
-    inline TaskQueueCode _push_round_robin(T item);
+    inline TaskQueueCode _push_rrws(T item);
+    inline T _pop_rrws();
 
-    inline TaskQueueCode _push_stolen(T item, size_t worker_id);
-    inline TaskQueueCode _push_one(T item, size_t qid);
-    inline TaskQueueCode _push_local_with_steal_many(T item);
-
-    // helper functions
-    inline T _dequeue_one(size_t qid);
-    inline T _pop_master();
-
-    // pop functions
-    inline T _pop_local_with_load_balance();
-    inline T _pop_round_robin();
-    inline T _pop_local_with_steal_many();
-
-    inline void _request_steal();
     inline void _request_steals();
-    inline void _handle_request();
     inline void _handle_requests();
   };
 
@@ -610,12 +596,12 @@ class BoundedTaskQueue {
 
   #ifdef TF_ENABLE_STATS
   
-  uint64_t ntasks_pushed_wsq {0};
-  uint64_t ntasks_not_pushed_wsq {0};
-  uint64_t ntasks_popped_wsq {0};
-  uint64_t ntasks_not_popped_wsq {0};
-  uint64_t ntasks_stolen_wsq {0};
-  uint64_t ntasks_not_stolen_wsq {0};
+  uint64_t _ntasks_pushed_wsq {0};
+  uint64_t _ntasks_not_pushed_wsq {0};
+  uint64_t _ntasks_popped_wsq {0};
+  uint64_t _ntasks_not_popped_wsq {0};
+  uint64_t _ntasks_stolen_remote {0};
+  uint64_t _ntasks_not_stolen_remote {0};
   #endif // TF_ENABLE_STATS
 };
 
@@ -646,7 +632,7 @@ bool BoundedTaskQueue<T, LogSize>::try_push(O&& o) {
   // queue is full with one additional item (b-t+1)
   if TF_UNLIKELY((b - t) > BufferSize - 1) {
     #ifdef TF_ENABLE_STATS
-    ++ntasks_not_pushed_wsq;
+    ++_ntasks_not_pushed_wsq;
     #endif // TF_ENABLE_STATS
     return false;
   }
@@ -658,7 +644,7 @@ bool BoundedTaskQueue<T, LogSize>::try_push(O&& o) {
   // original paper uses relaxed here but tsa complains
   _bottom.store(b + 1, std::memory_order_release);
   #ifdef TF_ENABLE_STATS
-  ++ntasks_pushed_wsq;
+  ++_ntasks_pushed_wsq;
   #endif // TF_ENABLE_STATS
   return true;
 }
@@ -674,7 +660,7 @@ void BoundedTaskQueue<T, LogSize>::push(O&& o, C&& on_full) {
   // queue is full with one additional item (b-t+1)
   if TF_UNLIKELY((b - t) > BufferSize - 1) {
     #ifdef TF_ENABLE_STATS
-    ++ntasks_not_pushed_wsq;
+    ++_ntasks_not_pushed_wsq;
     #endif // TF_ENABLE_STATS
     on_full();
     return;
@@ -687,7 +673,7 @@ void BoundedTaskQueue<T, LogSize>::push(O&& o, C&& on_full) {
   // original paper uses relaxed here but tsa complains
   _bottom.store(b + 1, std::memory_order_release);
   #ifdef TF_ENABLE_STATS
-  ++ntasks_pushed_wsq;
+  ++_ntasks_pushed_wsq;
   // printf("q size: %lu\n", size());
   #endif // TF_ENABLE_STATS
 }
@@ -720,10 +706,10 @@ T BoundedTaskQueue<T, LogSize>::pop() {
   }
   #ifdef TF_ENABLE_STATS
   if(item != nullptr) {
-    ++ntasks_popped_wsq;
+    ++_ntasks_popped_wsq;
   }
   else {
-    ++ntasks_not_popped_wsq;
+    ++_ntasks_not_popped_wsq;
   }
   #endif // TF_ENABLE_STATS
   return item;
@@ -746,15 +732,6 @@ T BoundedTaskQueue<T, LogSize>::steal() {
       return nullptr;
     }
   }
-  #ifdef TF_ENABLE_STATS
-  if(item) {
-    ++ntasks_stolen_wsq; // data race can happen here, only use it for stats
-  }
-  else {
-    ++ntasks_not_stolen_wsq;
-  }
-  #endif // TF_ENABLE_STATS
-
   return item;
 }
 
@@ -779,14 +756,6 @@ T BoundedTaskQueue<T, LogSize>::steal_with_hint(size_t& num_empty_steals) {
   else {
     ++num_empty_steals;
   }
-  #ifdef TF_ENABLE_STATS
-  if(item) {
-    ++ntasks_stolen_wsq;
-  }
-  else {
-    ++ntasks_not_stolen_wsq;
-  }
-  #endif // TF_ENABLE_STATS
   return item;
 }
 

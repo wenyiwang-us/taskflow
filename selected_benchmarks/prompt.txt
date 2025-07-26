@@ -1,0 +1,21 @@
+Write me a run script `run.py` which behaves similar to `thread_scaling.py`.
+The main purpose for this script is to run a complete set of experiments, with different combination of parameters.
+Each run starts with a run `name`, which will be the filename of the resulting csv file.
+We will go through a list of benchmarks, e.g. fibonacci. (col=benchmark)
+We will also go through a list of thread counts. e.g. 2,4,6. (col=nthreads)
+We will run each combination `round` times. (col=round) (This is not the `-r` each program takes, that will always be 1. We will iterate them inside our run script.)
+We provide a dictionary, where key is the `benchmark`, the value is a list of input arguments `input`. (col=input)
+We will choose to run either `tf` or `xtf` methods. (col=method)
+The `xtf` experiments have an extra set of parameters to go through, which will be set as environmental variables:
+- A list of nvtms (number of victims, TF_NVTMS), e.g. [1, 2, 4], (col=nvtms)
+- A list of nsteals (number of steals, TF_NSTEALS), e.g. [1, 2, 4, 32], (col=nsteals)
+- A list of nwaits (number of waits, TF_NWAITS), e.g. [1000, 10000, 100000], (col=nwaits)
+To run all the combination, we can simply do a product operation for the information provide above.
+When a experiment finishes, we parse the printed results.
+The are two type of result formats.
+For `tf`, as can be indicated, the results provided by the program are "input (a.k.a size),num_threads (a.k.a. nthreads), runtime (aka runtime(ms))".
+The results to be saved is "name,benchmark,method,input,nthreads,round,runtime(ms)"
+For `xtf`, the results to be saved is "name,benchmark,method,input,nthreads,round,nvtms,nsteals,nwaits,runtime(ms)"
+We can additionally choose to plot the just saved csv file using functions from plot.py, which will be implemented further.
+
+

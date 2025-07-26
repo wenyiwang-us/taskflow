@@ -4,7 +4,8 @@
 void reduce_sum(
   const std::string& model,
   const unsigned num_threads,
-  const unsigned num_rounds
+  const unsigned num_rounds,
+  const size_t vector_size
   ) {
 
   std::cout << std::setw(12) << "size"
@@ -14,7 +15,7 @@ void reduce_sum(
 
   // for(size_t N=10; N<=1000000000; N = N*10) {
     // size_t N = 1000000000; // 1e9,
-    size_t N = 8*1e9; // cannot be larger due to memory limit
+    size_t N = vector_size; // cannot be larger due to memory limit
 
     vec.resize(N);
 
@@ -50,6 +51,9 @@ int main(int argc, char* argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  size_t vector_size {8*1000000000};
+  app.add_option("-i,--input", vector_size, "vector size (default=8*1e9)");
+
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tbb|omp|tf (default=tf)")
      ->check([] (const std::string& m) {
@@ -64,9 +68,10 @@ int main(int argc, char* argv[]) {
   std::cout << "model=" << model << ' '
             << "num_threads=" << num_threads << ' '
             << "num_rounds=" << num_rounds << ' '
+            << "vector_size=" << vector_size << ' '
             << std::endl;
 
-  reduce_sum(model, num_threads, num_rounds);
+  reduce_sum(model, num_threads, num_rounds, vector_size);
 
   return 0;
 }

@@ -11,7 +11,8 @@ double **matrix = nullptr;
 void wavefront(
   const std::string& model,
   const unsigned num_threads,
-  const unsigned num_rounds
+  const unsigned num_rounds,
+  const int matrix_size
   ) {
 
   std::cout << std::setw(12) << "size"
@@ -23,9 +24,9 @@ void wavefront(
 
     // int S = 4096;
     // int S = 16384; // ~2000 ms
-    int S = 32768; // ~8000 ms
+    // int S = 32768; // ~8000 ms
 
-    M = N = S;
+    M = N = matrix_size;
     B = 8;
     MB = (M/B) + (M%B>0);
     NB = (N/B) + (N%B>0);
@@ -66,6 +67,9 @@ int main(int argc, char* argv[]) {
   unsigned num_rounds {1};
   app.add_option("-r,--num_rounds", num_rounds, "number of rounds (default=1)");
 
+  int matrix_size {32768};
+  app.add_option("-i,--input", matrix_size, "matrix size (default=32768)");
+
   std::string model = "tf";
   app.add_option("-m,--model", model, "model name tbb|omp|tf (default=tf)")
      ->check([] (const std::string& m) {
@@ -80,9 +84,10 @@ int main(int argc, char* argv[]) {
   std::cout << "model=" << model << ' '
             << "num_threads=" << num_threads << ' '
             << "num_rounds=" << num_rounds << ' '
+            << "matrix_size=" << matrix_size << ' '
             << std::endl;
 
-  wavefront(model, num_threads, num_rounds);
+  wavefront(model, num_threads, num_rounds, matrix_size);
 
   return 0;
 }

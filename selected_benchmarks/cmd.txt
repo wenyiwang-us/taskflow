@@ -1,0 +1,8 @@
+python run.py \
+    -t 48 96 168 \
+    -m tf \
+    -b wavefront graph_traversal binary_tree linear_chain matrix_multiplication black_scholes reduce_sum scan sort for_each primes \
+    --nvtms 1 2 4 8 16 \
+    --nsteals 1 2 4 8 16 \
+    --nwaits 1000 10000 100000 \
+    -r 3 -n tfall --shuffle
