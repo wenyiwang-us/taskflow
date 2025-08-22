@@ -38,7 +38,40 @@ small_inputs = {
     'wavefront': [4096],
 }
 
-benchmark_inputs = small_inputs
+adjusted_inputs_7_28 = {
+    'binary_tree': [23],
+    'black_scholes': [4000], # remain the same
+    'for_each' : [int(2e8)], 
+    'graph_traversal': [2000],
+    'linear_chain': [23], # remain the same
+    'mandelbrot': [500],
+    'matrix_multiplication': [2048],
+    'primes' : [int(3e6)],
+    'reduce_sum': [int(4e9)],
+    'scan': [int(4e9)],
+    'sort': [int(4e8)],
+    'wavefront': [16384],
+}
+
+adjusted_inputs_7_28_1 = {
+    'binary_tree': [23],
+    'black_scholes': [4000], # remain the same
+    'for_each' : [int(2e9)], 
+    'graph_traversal': [2000],
+    'linear_chain': [23], # remain the same
+    'mandelbrot': [5000],
+    'matrix_multiplication': [4096],
+    'primes' : [int(2e8)],
+    'reduce_sum': [int(8e9)],
+    'scan': [int(2e9)],
+    'sort': [int(3e8)],
+    'wavefront': [16384],
+}
+
+# benchmark_inputs = small_inputs
+# benchmark_inputs = adjusted_inputs_7_28
+benchmark_inputs = adjusted_inputs_7_28_1
+
 
 def calculate_total_experiments(args, benchmark_inputs):
     """Calculate the total number of experiments to be run"""
