@@ -12,6 +12,8 @@ import argparse
 import os
 from pathlib import Path
 
+plt.style.use('paper.mplstyle')
+
 SEQ_BENCH = [
     'black_scholes',
     'for_each',
@@ -26,6 +28,14 @@ SEQ_BENCH = [
     'binary_tree',
     'linear_chain'
 ]
+
+SELECTED_BENCH = [
+    'for_each',
+    'matrix_multiplication',
+    'graph_traversal',
+    'binary_tree',
+]
+
 def load_and_process_data(csv_paths, methods=['tf', 'xtf']):
     """
     Load CSV files and process the data according to the requirements.
@@ -108,20 +118,14 @@ def create_performance_plot(data, output_file='performance_scaling.png'):
         data: Processed DataFrame with performance data
         output_file: Output file path for the plot
     """
-    # Get unique benchmarks
-    # benchmarks = sorted(data['benchmark'].unique())
-    benchmarks = SEQ_BENCH
+    # Get selected benchmarks
+    benchmarks = SELECTED_BENCH
     
-    # Calculate subplot layout - 4 columns by 3 rows
+    # Calculate subplot layout - 2x2 grid for 4 benchmarks
     n_benchmarks = len(benchmarks)
-    # n_cols = 4  # 6 columns
-    # n_rows = 3  # 2 rows
-    # # Create figure and subplots
-    # fig, axes = plt.subplots(n_rows, n_cols, figsize=(24, 10))
-    
-    n_cols = 6
+    n_cols = 2
     n_rows = 2
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(40, 10))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(8, 5))
     
    
     axes = axes.flatten()  # Use column-major (Fortran-style) order
